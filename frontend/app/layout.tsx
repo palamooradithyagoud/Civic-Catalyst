@@ -17,13 +17,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Nivaaran AI — AI-Powered Civic Issue Reporting",
+  title: "Civic Catalyst — AI-Powered Civic & Health Platform",
   description:
-    "Nivaaran AI helps villagers report civic problems and connects them with the right Gram Panchayat authority using AI. Simple, fast, and accessible for rural communities.",
-  keywords: ["civic tech", "gram panchayat", "village complaints", "AI", "india", "government"],
+    "Civic Catalyst helps villagers report civic problems and connects them with the right Gram Panchayat & Health authorities using AI.",
+  keywords: ["civic tech", "gram panchayat", "village complaints", "asha worker", "inventory", "AI", "india"],
   openGraph: {
-    title: "Nivaaran AI",
-    description: "AI can turn every citizen's voice into action.",
+    title: "Civic Catalyst",
+    description: "Empowering rural India through smart civic & health management.",
     type: "website",
   },
 };

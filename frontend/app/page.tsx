@@ -39,7 +39,7 @@ export default function LandingPage() {
             <Leaf className="h-5 w-5 text-white" />
           </div>
           <span className="font-bold text-emerald-950 text-lg tracking-tight">
-            Nivaaran AI
+            Civic Catalyst
           </span>
         </div>
         <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
@@ -62,14 +62,13 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight mb-3">
-            Nivaaran AI
+            Civic Catalyst
           </h1>
           <p className="text-lg sm:text-xl text-emerald-900 font-semibold mb-4 leading-snug">
-            &ldquo;AI can turn every citizen&apos;s voice into action.&rdquo;
+            &ldquo;Empowering every citizen&apos;s voice into action.&rdquo;
           </p>
           <p className="text-slate-600 text-base max-w-md mx-auto leading-relaxed">
-            An AI-assisted civic issue reporting platform bridging villagers
-            with Gram Panchayat authorities — faster, smarter, and simpler.
+            Report civic problems or manage ASHA health inventory with smart AI assistance.
           </p>
         </section>
 
@@ -92,9 +91,6 @@ export default function LandingPage() {
 
         {/* ── Role Selection ─────────────────────────────────────────────────── */}
         <section id="role-selection" className="mb-10">
-          <p className="text-center text-sm font-semibold text-emerald-900 uppercase tracking-widest mb-5">
-            Who are you?
-          </p>
           <RoleSelector />
         </section>
 
@@ -102,7 +98,7 @@ export default function LandingPage() {
         <section className="mb-10">
           <div className="bg-emerald-50/50 rounded-2xl border border-emerald-200 p-5">
             <p className="text-sm font-semibold text-emerald-950 mb-4 text-center">
-              How Nivaaran AI connects communities
+              How Civic Catalyst connects communities
             </p>
             <div className="flex items-center justify-between gap-2">
               {/* Villager */}
@@ -148,7 +144,7 @@ export default function LandingPage() {
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
       <footer className="text-center py-6 px-4 border-t border-slate-100">
         <p className="text-xs text-slate-400">
-          Nivaaran AI &nbsp;·&nbsp; Built for rural India &nbsp;·&nbsp; Hackathon Demo v0.1
+          Civic Catalyst &nbsp;·&nbsp; Built for rural India &nbsp;·&nbsp; Hackathon Demo v0.1
         </p>
       </footer>
     </div>

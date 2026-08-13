@@ -15,7 +15,7 @@ load_dotenv()
 # ── App ──────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="Nivaaran AI API",
+    title="Civic Catalyst API",
     description="AI-assisted civic issue reporting platform & Supabase Medical Inventory System.",
     version="0.1.0",
     docs_url="/api/docs",
@@ -51,7 +51,7 @@ async def health_check():
     """Service health check endpoint."""
     return HealthResponse(
         status="ok",
-        service="Nivaaran AI API (Supabase Connected)",
+        service="Civic Catalyst API (Supabase Connected)",
         version="0.1.0",
     )
 
@@ -59,7 +59,7 @@ async def health_check():
 @app.get("/", tags=["system"])
 async def root():
     return {
-        "message": "Nivaaran AI API is running with Supabase backend.",
+        "message": "Civic Catalyst API is running with Supabase backend.",
         "docs": "/api/docs",
         "version": "0.1.0",
     }

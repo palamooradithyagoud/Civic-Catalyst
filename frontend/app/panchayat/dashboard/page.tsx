@@ -242,7 +242,7 @@ export default function PanchayatDashboard() {
             <Shield style={{ width: 16, height: 16, color: "white" }} />
           </div>
           <div>
-            <div className="sidebar-logo-name">Nivaaran AI</div>
+            <div className="sidebar-logo-name">Civic Catalyst</div>
             <div className="sidebar-logo-version">Panchayat Portal · v1.0</div>
           </div>
         </div>
