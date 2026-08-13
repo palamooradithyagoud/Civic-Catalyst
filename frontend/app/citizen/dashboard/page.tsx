@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -27,7 +27,7 @@ const HOW_IT_WORKS = [
     number: "01",
     numberClass: "step-number orange",
     icon: FileText,
-    iconColor: "#fb923c",
+    iconColor: "#ffffff",
     label: "Describe your problem",
     desc: "Type in your language, record a voice note, or upload a photo of the issue.",
   },
@@ -35,7 +35,7 @@ const HOW_IT_WORKS = [
     number: "02",
     numberClass: "step-number blue",
     icon: AlertCircle,
-    iconColor: "#93c5fd",
+    iconColor: "#a7f3d0",
     label: "AI classifies and routes",
     desc: "Our AI identifies the issue category and automatically finds the right official.",
   },
@@ -43,7 +43,7 @@ const HOW_IT_WORKS = [
     number: "03",
     numberClass: "step-number green",
     icon: CheckCircle2,
-    iconColor: "#6ee7b7",
+    iconColor: "#34d399",
     label: "Track resolution",
     desc: "Get real-time updates as your complaint moves through the system.",
   },
@@ -70,7 +70,7 @@ export default function CitizenDashboard() {
 
   if (loading || !session) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#05111f" }}>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#ffffff" }}>
         <div className="loading-spinner" />
       </div>
     );
@@ -102,7 +102,7 @@ export default function CitizenDashboard() {
             </p>
             <div className="hero-meta">
               <span className="hero-meta-item">
-                <Shield style={{ width: 12, height: 12, color: "#6ee7b7" }} />
+                <Shield style={{ width: 12, height: 12, color: "#34d399" }} />
                 Secure and confidential
               </span>
               <span className="hero-meta-item">
@@ -129,18 +129,17 @@ export default function CitizenDashboard() {
                   style={{
                     padding: "0.875rem 0.75rem",
                     borderRadius: "10px",
-                    border: "1px solid rgba(234,88,12,0.15)",
-                    background: "rgba(234,88,12,0.05)",
+                    border: "1px solid #a7f3d0",
+                    background: "#ecfdf5",
                     textAlign: "center",
                     cursor: "not-allowed",
-                    opacity: 0.65,
                     transition: "all 0.2s",
                   }}
                   title="Coming in Phase 2"
                 >
-                  <Icon style={{ width: 20, height: 20, color: "#fb923c", margin: "0 auto 0.375rem" }} />
-                  <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "0.1rem" }}>{label}</p>
-                  <p style={{ fontSize: "0.68rem", color: "rgba(148,163,184,0.5)" }}>{desc}</p>
+                  <Icon style={{ width: 20, height: 20, color: "#047857", margin: "0 auto 0.375rem" }} />
+                  <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "#042d20", marginBottom: "0.1rem" }}>{label}</p>
+                  <p style={{ fontSize: "0.68rem", color: "#64748b" }}>{desc}</p>
                 </div>
               ))}
             </div>

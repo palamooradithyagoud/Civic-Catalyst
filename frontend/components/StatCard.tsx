@@ -12,8 +12,8 @@ export function StatCard({
   label,
   value,
   icon: Icon,
-  iconColor = "text-indigo-600",
-  iconBg = "bg-indigo-50",
+  iconColor = "text-emerald-800",
+  iconBg = "bg-emerald-100",
 }: StatCardProps) {
   return (
     <div className="stat-card">
