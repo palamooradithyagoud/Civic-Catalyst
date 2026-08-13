@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -69,35 +69,43 @@ export default function CitizenDashboard() {
   }
 
   const NAV_ITEMS = [
-    { id: "home", label: "Home", icon: HomeIcon, emoji: "🏠" },
-    { id: "complaints", label: "Complaints", icon: AlertCircle, emoji: "🚨" },
-    { id: "weather", label: "Weather", icon: CloudSun, emoji: "🌦️" },
-    { id: "market", label: "Market Prices", icon: TrendingUp, emoji: "🌾" },
-    { id: "news", label: "Local News", icon: FileText, emoji: "📰" },
+    { id: "home", label: "Home", icon: HomeIcon },
+    { id: "complaints", label: "Complaints", icon: AlertCircle },
+    { id: "weather", label: "Weather", icon: CloudSun },
+    { id: "market", label: "Market Prices", icon: TrendingUp },
+    { id: "news", label: "Local News", icon: FileText },
   ];
 
   const CAPABILITIES = [
     {
       id: "complaints",
-      emoji: "🚨",
+      icon: AlertCircle,
+      iconBg: "#fef2f2",
+      iconColor: "#ef4444",
       title: "Civic Complaints",
       desc: "Report problems in your village and track their progress.",
     },
     {
       id: "weather",
-      emoji: "🌦️",
+      icon: CloudSun,
+      iconBg: "#eff6ff",
+      iconColor: "#3b82f6",
       title: "Weather",
       desc: "Check current weather and forecasts for your area.",
     },
     {
       id: "market",
-      emoji: "🌾",
+      icon: TrendingUp,
+      iconBg: "#ecfdf5",
+      iconColor: "#059669",
       title: "Market Prices",
       desc: "View current market prices for agricultural crops.",
     },
     {
       id: "news",
-      emoji: "📰",
+      icon: FileText,
+      iconBg: "#f5f3ff",
+      iconColor: "#8b5cf6",
       title: "Local News",
       desc: "Stay informed about important news and updates from your village.",
     },
@@ -482,8 +490,8 @@ export default function CitizenDashboard() {
               <Menu style={{ width: 20, height: 20 }} />
             </button>
             <div>
-              <div style={{ fontWeight: 800, color: "#0c1f15", fontSize: "0.875rem", lineHeight: 1.2 }}>Shyampet</div>
-              <div style={{ fontSize: "0.575rem", fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: "0.1em" }}>Civic Portal</div>
+              <div style={{ fontWeight: 800, color: "#0c1f15", fontSize: "0.9375rem", lineHeight: 1.2 }}>Civic Portal</div>
+              <div style={{ fontSize: "0.575rem", fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: "0.1em" }}>Digital Village</div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -513,8 +521,8 @@ export default function CitizenDashboard() {
                 <Leaf style={{ width: 17, height: 17, color: "white" }} />
               </div>
               <div>
-                <div className="vdp-brand-name">Shyampet</div>
-                <div className="vdp-brand-sub">Civic Portal</div>
+                <div className="vdp-brand-name">Civic Portal</div>
+                <div className="vdp-brand-sub">Digital Village</div>
               </div>
               <button
                 className="vdp-brand-close"
@@ -530,6 +538,7 @@ export default function CitizenDashboard() {
             <nav className="vdp-nav" role="navigation" aria-label="Main navigation">
               {NAV_ITEMS.map((item) => {
                 const isActive = currentTab === item.id;
+                const IconComponent = item.icon;
                 return (
                   <button
                     key={item.id}
@@ -538,7 +547,7 @@ export default function CitizenDashboard() {
                     className={`vdp-nav-btn${isActive ? " active" : ""}`}
                     aria-current={isActive ? "page" : undefined}
                   >
-                    <span className="vdp-nav-emoji">{item.emoji}</span>
+                    <IconComponent style={{ width: 17, height: 17, flexShrink: 0, color: isActive ? "#059669" : "#6b7280" }} />
                     <span>{item.label}</span>
                   </button>
                 );
@@ -567,7 +576,7 @@ export default function CitizenDashboard() {
             <div>
               {/* Greeting */}
               <div className="vdp-greeting">
-                <h1 className="vdp-greeting-title">Welcome back, {session.name} 👋</h1>
+                <h1 className="vdp-greeting-title">Welcome back, {session.name}</h1>
                 <p className="vdp-greeting-sub">Welcome to your village civic portal.</p>
               </div>
 
@@ -586,24 +595,38 @@ export default function CitizenDashboard() {
               {/* Capabilities */}
               <p className="vdp-caps-label">Platform Capabilities</p>
               <div className="vdp-caps-grid">
-                {CAPABILITIES.map((cap) => (
-                  <div
-                    key={cap.id}
-                    id={`vdp-cap-${cap.id}`}
-                    className="vdp-cap-card"
-                    onClick={() => handleNav(cap.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && handleNav(cap.id)}
-                  >
-                    <div className="vdp-cap-top">
-                      <span className="vdp-cap-emoji">{cap.emoji}</span>
-                      <span className="vdp-cap-arrow">Explore →</span>
+                {CAPABILITIES.map((cap) => {
+                  const CapIcon = cap.icon;
+                  return (
+                    <div
+                      key={cap.id}
+                      id={`vdp-cap-${cap.id}`}
+                      className="vdp-cap-card"
+                      onClick={() => handleNav(cap.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === "Enter" && handleNav(cap.id)}
+                    >
+                      <div className="vdp-cap-top">
+                        <div style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 10,
+                          background: cap.iconBg,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0
+                        }}>
+                          <CapIcon style={{ width: 18, height: 18, color: cap.iconColor }} />
+                        </div>
+                        <span className="vdp-cap-arrow">Explore →</span>
+                      </div>
+                      <div className="vdp-cap-title">{cap.title}</div>
+                      <div className="vdp-cap-desc">{cap.desc}</div>
                     </div>
-                    <div className="vdp-cap-title">{cap.title}</div>
-                    <div className="vdp-cap-desc">{cap.desc}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* One Platform Card */}
