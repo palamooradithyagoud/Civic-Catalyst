@@ -49,9 +49,11 @@ import {
   Calendar,
   CloudRain,
   ShieldCheck,
+  Globe,
 } from "lucide-react";
 import { analyzeIssueImage, reverseGeocodeLocation } from "@/services/complaintsApi";
 import { fetchLiveGpsWeather, type WeatherData } from "@/services/weatherApi";
+import { translations, type Language } from "@/lib/translations";
 
 // ── Demo Data ────────────────────────────────────────────────────────────────
 
@@ -236,6 +238,20 @@ export default function CitizenDashboard() {
     }
   };
 
+  // Language & Translation State
+  const [lang, setLang] = useState<Language>("en");
+
+  const changeLanguage = (newLang: Language) => {
+    setLang(newLang);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("citizen_lang", newLang);
+    }
+  };
+
+  const t = (key: string): string => {
+    return translations[lang]?.[key] || translations["en"]?.[key] || key;
+  };
+
   useEffect(() => {
     const s = getSession();
     if (!s) {
@@ -248,6 +264,14 @@ export default function CitizenDashboard() {
     }
     setSession(s as DemoVillager);
     setLoading(false);
+
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("citizen_lang") as Language;
+      if (saved && (saved === "en" || saved === "hi" || saved === "te")) {
+        setLang(saved);
+      }
+    }
+
     loadWeatherForUser();
   }, [router]);
 
@@ -385,8 +409,8 @@ export default function CitizenDashboard() {
             <Shield style={{ width: 16, height: 16, color: "white" }} />
           </div>
           <div>
-            <div className="sidebar-logo-name">Civic Portal</div>
-            <div className="sidebar-logo-version">Citizen Portal · v1.0</div>
+            <div className="sidebar-logo-name">{t("citizenTitle")}</div>
+            <div className="sidebar-logo-version">{t("citizenSub")}</div>
           </div>
         </div>
 
@@ -396,6 +420,11 @@ export default function CitizenDashboard() {
           {NAV_ITEMS.map(({ id, icon: Icon, label, badge }) => {
             const isActive = currentTab === id;
             const liveBadge = id === "weather" ? (weatherData ? `${weatherData.temperature}°` : badge) : id === "complaints" ? String(complaints.length) : badge;
+            const labelText = id === "home" ? t("navCitizenHome") :
+                              id === "complaints" ? t("navCitizenComplaints") :
+                              id === "weather" ? t("navCitizenWeather") :
+                              id === "market" ? t("navCitizenMarket") :
+                              id === "news" ? t("navCitizenNews") : label;
             return (
               <button
                 key={id}
@@ -404,7 +433,7 @@ export default function CitizenDashboard() {
                 style={{ width: "100%", textAlign: "left", background: "transparent", cursor: "pointer" }}
               >
                 <Icon className="sidebar-nav-icon" />
-                <span className="sidebar-nav-text">{label}</span>
+                <span className="sidebar-nav-text">{labelText}</span>
                 {liveBadge && <span className="sidebar-nav-badge">{liveBadge}</span>}
               </button>
             );
@@ -433,7 +462,29 @@ export default function CitizenDashboard() {
 
         {/* Top bar */}
         <header className="panchayat-topbar">
-          <div className="topbar-right">
+          <div className="topbar-right" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {/* Language Selector Dropdown */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#f8fafc", padding: "0.35rem 0.65rem", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
+              <Globe size={15} style={{ color: "#047857" }} />
+              <select
+                value={lang}
+                onChange={(e) => changeLanguage(e.target.value as Language)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontSize: "0.78rem",
+                  fontWeight: 800,
+                  color: "#0f172a",
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="en">🇬🇧 English</option>
+                <option value="hi">🇮🇳 हिंदी (Hindi)</option>
+                <option value="te">🇮🇳 తెలుగు (Telugu)</option>
+              </select>
+            </div>
+
             <button className="topbar-icon-btn" title="Messages">
               <MessageSquare style={{ width: 15, height: 15 }} />
             </button>
@@ -470,10 +521,10 @@ export default function CitizenDashboard() {
               {/* Greetings */}
               <div style={{ marginBottom: "0.85rem" }}>
                 <h1 className="greeting-title" style={{ fontSize: "1.5rem" }}>
-                  Welcome back, {displayName}
+                  {t("welcomeBack")}, {displayName}
                 </h1>
                 <p className="greeting-sub" style={{ fontSize: "0.82rem", color: "#64748b", marginTop: "0.15rem" }}>
-                  Welcome to your village civic portal. Access services and report issues below.
+                  {t("welcomeSub")}
                 </p>
               </div>
 
@@ -508,7 +559,7 @@ export default function CitizenDashboard() {
                         {weatherData ? weatherData.conditionText : "Partly Cloudy"}
                       </span>
                       <span style={{ background: "rgba(255,255,255,0.2)", fontSize: "0.65rem", padding: "0.1rem 0.4rem", borderRadius: 999, fontWeight: 700 }}>
-                        📍 Live GPS
+                        📍 {t("liveGpsStation")}
                       </span>
                     </div>
                     <div style={{ fontSize: "0.72rem", opacity: 0.85, marginTop: "0.15rem" }}>
@@ -518,7 +569,7 @@ export default function CitizenDashboard() {
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.74rem", fontWeight: 800, background: "rgba(255,255,255,0.18)", padding: "0.35rem 0.75rem", borderRadius: 8 }}>
-                  <span>7-Day Farm Outlook</span>
+                  <span>{t("navCitizenWeather")}</span>
                   <ArrowRight size={13} />
                 </div>
               </div>
@@ -527,19 +578,19 @@ export default function CitizenDashboard() {
               <div className="featured-stat-card blue" style={{ minHeight: "auto", padding: "1.1rem 1.25rem", marginBottom: "0.85rem" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.65rem", fontWeight: 700, color: "#a7f3d0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.35rem" }}>
                   <Sparkles style={{ width: 12, height: 12 }} />
-                  Digital Village Platform
+                  {t("onePlatform")}
                 </div>
                 <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#ffffff", margin: "0 0 0.3rem 0", lineHeight: 1.25 }}>
-                  Your Village, Digitally Connected
+                  {t("heroTitle")}
                 </h2>
                 <p style={{ fontSize: "0.8rem", color: "#a7f3d0", margin: 0, opacity: 0.95, maxWidth: 640, lineHeight: 1.45 }}>
-                  Access village services, report civic problems, check weather, view market prices, and stay updated with local news — all in one place.
+                  {t("heroSub")}
                 </p>
               </div>
 
               {/* Section Header */}
               <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "0.5rem" }}>
-                Platform Capabilities
+                {t("platformCapabilities")}
               </div>
 
               {/* 4 Feature Boxes (2 in a row) */}
@@ -611,12 +662,12 @@ export default function CitizenDashboard() {
               <div className="glass-card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
                   <div>
-                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>Civic Complaints</h2>
-                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: "0.25rem 0 0 0" }}>Report problems in your village and track department resolution progress</p>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>{t("navCitizenComplaints")}</h2>
+                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: "0.25rem 0 0 0" }}>{t("welcomeSub")}</p>
                   </div>
                   <button className="add-report-btn" onClick={() => setModalOpen(true)}>
                     <Plus style={{ width: 15, height: 15 }} />
-                    Report New Issue
+                    {t("btnReportIssue")}
                   </button>
                 </div>
 
@@ -679,10 +730,10 @@ export default function CitizenDashboard() {
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                         <h2 style={{ fontSize: "1.3rem", fontWeight: 900, color: "#042d20", margin: 0 }}>
-                          Live Weather &amp; Farming Forecast
+                          {t("navCitizenWeather")}
                         </h2>
                         <span style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", fontSize: "0.68rem", fontWeight: 800, padding: "0.15rem 0.5rem", borderRadius: 999 }}>
-                          ● Live GPS Station
+                          ● {t("liveGpsStation")}
                         </span>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.2rem", fontSize: "0.78rem", color: "#64748b" }}>
@@ -712,7 +763,7 @@ export default function CitizenDashboard() {
                     }}
                   >
                     <RefreshCw size={14} className={weatherLoading ? "animate-spin" : ""} style={{ color: "#0284c7" }} />
-                    {weatherLoading ? "Detecting GPS..." : "Refresh GPS Weather"}
+                    {weatherLoading ? "..." : t("refreshWeather")}
                   </button>
                 </div>
 
@@ -892,8 +943,8 @@ export default function CitizenDashboard() {
                     <TrendingUp style={{ width: 24, height: 24, color: "#059669" }} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>Agricultural Mandi Rates</h2>
-                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: 0 }}>Daily crop market prices for local mandis</p>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>{t("mandiTitle")}</h2>
+                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: 0 }}>{t("mandiSub")}</p>
                   </div>
                 </div>
 
@@ -923,8 +974,8 @@ export default function CitizenDashboard() {
                     <FileText style={{ width: 24, height: 24, color: "#7c3aed" }} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>Village News &amp; Notices</h2>
-                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: 0 }}>Verified announcements from Gram Sabha</p>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>{t("newsTitle")}</h2>
+                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: 0 }}>{t("newsSub")}</p>
                   </div>
                 </div>
 
