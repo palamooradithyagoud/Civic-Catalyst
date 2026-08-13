@@ -38,8 +38,20 @@ import {
   Trash2,
   Image as ImageIcon,
   Zap,
+  Wind,
+  Droplets,
+  Sun,
+  Compass,
+  Navigation,
+  Thermometer,
+  Eye,
+  Umbrella,
+  Calendar,
+  CloudRain,
+  ShieldCheck,
 } from "lucide-react";
 import { analyzeIssueImage, reverseGeocodeLocation } from "@/services/complaintsApi";
+import { fetchLiveGpsWeather, type WeatherData } from "@/services/weatherApi";
 
 // ── Demo Data ────────────────────────────────────────────────────────────────
 
@@ -158,6 +170,72 @@ export default function CitizenDashboard() {
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [locationDetected, setLocationDetected] = useState(false);
 
+  // Live GPS Weather State
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState<boolean>(true);
+  const [weatherGpsCoords, setWeatherGpsCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [weatherLocationName, setWeatherLocationName] = useState<string>("Detecting GPS Location...");
+
+  const loadWeatherForUser = async (overrideLat?: number, overrideLon?: number) => {
+    setWeatherLoading(true);
+    if (overrideLat && overrideLon) {
+      try {
+        const geoRes = await reverseGeocodeLocation(overrideLat, overrideLon);
+        const locName = geoRes.location || `GPS (${overrideLat.toFixed(3)}°N, ${overrideLon.toFixed(3)}°E)`;
+        setWeatherLocationName(locName);
+        setWeatherGpsCoords({ lat: overrideLat, lon: overrideLon });
+        const w = await fetchLiveGpsWeather(overrideLat, overrideLon, locName);
+        setWeatherData(w);
+      } catch {
+        const w = await fetchLiveGpsWeather(overrideLat, overrideLon, "Village Area");
+        setWeatherData(w);
+      } finally {
+        setWeatherLoading(false);
+      }
+      return;
+    }
+
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setWeatherGpsCoords({ lat: latitude, lon: longitude });
+          try {
+            const geoRes = await reverseGeocodeLocation(latitude, longitude);
+            const locName = geoRes.location || `GPS (${latitude.toFixed(3)}°N, ${longitude.toFixed(3)}°E)`;
+            setWeatherLocationName(locName);
+            const w = await fetchLiveGpsWeather(latitude, longitude, locName);
+            setWeatherData(w);
+          } catch {
+            const w = await fetchLiveGpsWeather(latitude, longitude, `GPS (${latitude.toFixed(3)}°N, ${longitude.toFixed(3)}°E)`);
+            setWeatherData(w);
+          } finally {
+            setWeatherLoading(false);
+          }
+        },
+        async () => {
+          const defaultLat = 17.9689;
+          const defaultLon = 79.5941;
+          const defName = session?.village ? `${session.village} (GPS Standard)` : "Shyampet Village, Warangal";
+          setWeatherLocationName(defName);
+          setWeatherGpsCoords({ lat: defaultLat, lon: defaultLon });
+          const w = await fetchLiveGpsWeather(defaultLat, defaultLon, defName);
+          setWeatherData(w);
+          setWeatherLoading(false);
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    } else {
+      const defaultLat = 17.9689;
+      const defaultLon = 79.5941;
+      const defName = session?.village ? `${session.village} (GPS Standard)` : "Shyampet Village, Warangal";
+      setWeatherLocationName(defName);
+      const w = await fetchLiveGpsWeather(defaultLat, defaultLon, defName);
+      setWeatherData(w);
+      setWeatherLoading(false);
+    }
+  };
+
   useEffect(() => {
     const s = getSession();
     if (!s) {
@@ -170,6 +248,7 @@ export default function CitizenDashboard() {
     }
     setSession(s as DemoVillager);
     setLoading(false);
+    loadWeatherForUser();
   }, [router]);
 
   const handleLogout = () => {
@@ -316,6 +395,7 @@ export default function CitizenDashboard() {
         <nav className="sidebar-nav">
           {NAV_ITEMS.map(({ id, icon: Icon, label, badge }) => {
             const isActive = currentTab === id;
+            const liveBadge = id === "weather" ? (weatherData ? `${weatherData.temperature}°` : badge) : id === "complaints" ? String(complaints.length) : badge;
             return (
               <button
                 key={id}
@@ -325,7 +405,7 @@ export default function CitizenDashboard() {
               >
                 <Icon className="sidebar-nav-icon" />
                 <span className="sidebar-nav-text">{label}</span>
-                {badge && <span className="sidebar-nav-badge">{badge}</span>}
+                {liveBadge && <span className="sidebar-nav-badge">{liveBadge}</span>}
               </button>
             );
           })}
@@ -395,6 +475,52 @@ export default function CitizenDashboard() {
                 <p className="greeting-sub" style={{ fontSize: "0.82rem", color: "#64748b", marginTop: "0.15rem" }}>
                   Welcome to your village civic portal. Access services and report issues below.
                 </p>
+              </div>
+
+              {/* Live GPS Weather Widget */}
+              <div
+                onClick={() => setCurrentTab("weather")}
+                style={{
+                  background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+                  borderRadius: 14,
+                  padding: "0.85rem 1.15rem",
+                  color: "white",
+                  marginBottom: "0.85rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "0.75rem",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 14px rgba(2,132,199,0.25)"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <div style={{ fontSize: "1.8rem" }}>
+                    {weatherData ? (weatherData.weatherCode === 0 ? "☀️" : weatherData.weatherCode <= 3 ? "⛅" : "🌧️") : "🌤️"}
+                  </div>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <span style={{ fontSize: "1.1rem", fontWeight: 900 }}>
+                        {weatherData ? `${weatherData.temperature}°C` : "31°C"}
+                      </span>
+                      <span style={{ fontSize: "0.78rem", opacity: 0.9 }}>
+                        {weatherData ? weatherData.conditionText : "Partly Cloudy"}
+                      </span>
+                      <span style={{ background: "rgba(255,255,255,0.2)", fontSize: "0.65rem", padding: "0.1rem 0.4rem", borderRadius: 999, fontWeight: 700 }}>
+                        📍 Live GPS
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "0.72rem", opacity: 0.85, marginTop: "0.15rem" }}>
+                      {weatherLocationName} · Humidity: {weatherData?.humidity ?? 65}% · Wind: {weatherData?.windSpeed ?? 12} km/h
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.74rem", fontWeight: 800, background: "rgba(255,255,255,0.18)", padding: "0.35rem 0.75rem", borderRadius: 8 }}>
+                  <span>7-Day Farm Outlook</span>
+                  <ArrowRight size={13} />
+                </div>
               </div>
 
               {/* Hero Banner */}
@@ -542,34 +668,217 @@ export default function CitizenDashboard() {
           {/* ── WEATHER TAB ───────────────────────────────────── */}
           {currentTab === "weather" && (
             <div className="fade-up fade-up-2">
-              <div className="glass-card" style={{ padding: "1.5rem" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <CloudSun style={{ width: 24, height: 24, color: "#3b82f6" }} />
+              <div className="glass-card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
+                
+                {/* Weather Header Bar with Live GPS Button */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", marginBottom: "1.5rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #0284c7, #0369a1)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", boxShadow: "0 4px 14px rgba(2,132,199,0.3)" }}>
+                      <CloudSun style={{ width: 28, height: 28 }} />
+                    </div>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <h2 style={{ fontSize: "1.3rem", fontWeight: 900, color: "#042d20", margin: 0 }}>
+                          Live Weather &amp; Farming Forecast
+                        </h2>
+                        <span style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", fontSize: "0.68rem", fontWeight: 800, padding: "0.15rem 0.5rem", borderRadius: 999 }}>
+                          ● Live GPS Station
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.2rem", fontSize: "0.78rem", color: "#64748b" }}>
+                        <MapPin size={13} style={{ color: "#059669" }} />
+                        <span style={{ fontWeight: 700, color: "#0f172a" }}>{weatherLocationName}</span>
+                        {weatherData && <span>· Updated {weatherData.lastUpdated}</span>}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>Weather &amp; Farming Forecast</h2>
-                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: 0 }}>Current temperature &amp; 7-day outlook for {session.village}</p>
-                  </div>
+
+                  <button
+                    onClick={() => loadWeatherForUser()}
+                    disabled={weatherLoading}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.4rem",
+                      background: "#ffffff",
+                      border: "1px solid #cbd5e1",
+                      padding: "0.5rem 0.9rem",
+                      borderRadius: "10px",
+                      fontSize: "0.78rem",
+                      fontWeight: 800,
+                      color: "#0f172a",
+                      cursor: "pointer",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+                    }}
+                  >
+                    <RefreshCw size={14} className={weatherLoading ? "animate-spin" : ""} style={{ color: "#0284c7" }} />
+                    {weatherLoading ? "Detecting GPS..." : "Refresh GPS Weather"}
+                  </button>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem", marginBottom: "1.5rem" }}>
-                  <div style={{ background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)", color: "white", borderRadius: 16, padding: "1.25rem" }}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.85 }}>Temperature</div>
-                    <div style={{ fontSize: "2.25rem", fontWeight: 900, margin: "0.3rem 0" }}>32°C</div>
-                    <div style={{ fontSize: "0.78rem", opacity: 0.9 }}>Partly Cloudy · Humidity 68%</div>
+                {weatherLoading && !weatherData ? (
+                  <div style={{ padding: "3rem", textAlign: "center", color: "#64748b" }}>
+                    <Loader2 size={32} className="animate-spin" style={{ margin: "0 auto 0.75rem", color: "#0284c7" }} />
+                    <div style={{ fontWeight: 800, color: "#0f172a" }}>Acquiring Live GPS Satellite Weather Data...</div>
+                    <div style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>Calibrating village temperature, rainfall, and farming advisories</div>
                   </div>
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: "1.25rem" }}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>Wind Speed</div>
-                    <div style={{ fontSize: "2.25rem", fontWeight: 900, color: "#0f172a", margin: "0.3rem 0" }}>14 km/h</div>
-                    <div style={{ fontSize: "0.78rem", color: "#059669", fontWeight: 600 }}>Gentle Breeze · South-West</div>
-                  </div>
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: "1.25rem" }}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>Rainfall Forecast</div>
-                    <div style={{ fontSize: "2.25rem", fontWeight: 900, color: "#0f172a", margin: "0.3rem 0" }}>20%</div>
-                    <div style={{ fontSize: "0.78rem", color: "#0284c7", fontWeight: 600 }}>Light scattered shower expected Fri</div>
-                  </div>
-                </div>
+                ) : weatherData ? (
+                  <>
+                    {/* Top Hero & Overview Grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
+                      
+                      {/* Hero Temperature Card */}
+                      <div
+                        style={{
+                          background: "linear-gradient(135deg, #0369a1 0%, #0c4a6e 100%)",
+                          color: "white",
+                          borderRadius: 18,
+                          padding: "1.35rem",
+                          position: "relative",
+                          overflow: "hidden",
+                          boxShadow: "0 10px 25px -5px rgba(3,105,161,0.35)",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between"
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                            <span style={{ fontSize: "0.72rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", background: "rgba(255,255,255,0.18)", padding: "0.2rem 0.6rem", borderRadius: 999 }}>
+                              {weatherData.conditionText}
+                            </span>
+                            <span style={{ fontSize: "2rem" }}>
+                              {weatherData.weatherCode === 0 ? "☀️" : weatherData.weatherCode <= 3 ? "⛅" : weatherData.weatherCode >= 61 && weatherData.weatherCode <= 82 ? "🌧️" : "🌤️"}
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: "2.8rem", fontWeight: 900, marginTop: "0.4rem", lineHeight: 1 }}>
+                            {weatherData.temperature}°C
+                          </div>
+                          <div style={{ fontSize: "0.8rem", opacity: 0.9, marginTop: "0.35rem" }}>
+                            Feels like {weatherData.feelsLike}°C · High: {weatherData.tempMax}° / Low: {weatherData.tempMin}°
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: "0.74rem", opacity: 0.85, borderTop: "1px solid rgba(255,255,255,0.2)", paddingTop: "0.6rem", marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                          <Navigation size={12} style={{ transform: `rotate(${weatherData.windDirection}deg)` }} />
+                          Wind {weatherData.windSpeed} km/h · {weatherData.isDay ? "Daytime" : "Nighttime"}
+                        </div>
+                      </div>
+
+                      {/* Metric 1: Humidity */}
+                      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 18, padding: "1.25rem", display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#0284c7" }}>
+                          <Droplets size={18} />
+                          <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Humidity</span>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "2.1rem", fontWeight: 900, color: "#0f172a", margin: "0.2rem 0" }}>
+                            {weatherData.humidity}%
+                          </div>
+                          <div style={{ fontSize: "0.74rem", fontWeight: 700, color: weatherData.humidity > 75 ? "#d97706" : "#059669" }}>
+                            {weatherData.humidity > 75 ? "High Moisture" : weatherData.humidity > 45 ? "Optimal Comfort" : "Dry Air"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Metric 2: Wind Speed */}
+                      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 18, padding: "1.25rem", display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#059669" }}>
+                          <Wind size={18} />
+                          <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Wind Speed</span>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "2.1rem", fontWeight: 900, color: "#0f172a", margin: "0.2rem 0" }}>
+                            {weatherData.windSpeed} <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "#64748b" }}>km/h</span>
+                          </div>
+                          <div style={{ fontSize: "0.74rem", fontWeight: 700, color: weatherData.windSpeed > 25 ? "#dc2626" : "#059669" }}>
+                            {weatherData.windSpeed > 25 ? "Strong Gusts" : weatherData.windSpeed > 10 ? "Gentle Breeze" : "Calm Winds"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Metric 3: Rain Probability */}
+                      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 18, padding: "1.25rem", display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#6366f1" }}>
+                          <CloudRain size={18} />
+                          <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Rain Chance</span>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "2.1rem", fontWeight: 900, color: "#0f172a", margin: "0.2rem 0" }}>
+                            {weatherData.precipitationProbability}%
+                          </div>
+                          <div style={{ fontSize: "0.74rem", fontWeight: 700, color: weatherData.precipitationProbability > 50 ? "#2563eb" : "#64748b" }}>
+                            {weatherData.precipitationProbability > 50 ? "Rain Highly Likely" : weatherData.precipitationProbability > 20 ? "Low Chance" : "Dry Skies"}
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Farming & Agricultural Advisory Banner */}
+                    <div style={{ background: "#f0fdf4", border: "1.5px solid #86efac", borderRadius: 16, padding: "1.15rem 1.4rem", marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 10, background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Sparkles size={20} style={{ color: "#16a34a" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "#14532d" }}>
+                          🌾 Agricultural &amp; Crop Weather Advisory for {session.village}
+                        </div>
+                        <div style={{ fontSize: "0.82rem", color: "#166534", marginTop: "0.25rem", lineHeight: 1.45 }}>
+                          {weatherData.farmingAdvisory}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hourly Forecast Strip */}
+                    <div style={{ marginBottom: "1.5rem" }}>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#0f172a", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <Thermometer size={15} style={{ color: "#0284c7" }} />
+                        Hourly Temperature &amp; Sky Conditions (Next 8 Hours)
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(4, weatherData.hourlyForecast.length)}, 1fr)`, gap: "0.75rem", overflowX: "auto" }}>
+                        {weatherData.hourlyForecast.map((h, i) => (
+                          <div key={i} style={{ background: i === 0 ? "#eff6ff" : "#ffffff", border: i === 0 ? "1.5px solid #bfdbfe" : "1px solid #e2e8f0", borderRadius: 14, padding: "0.85rem 0.5rem", textAlign: "center" }}>
+                            <div style={{ fontSize: "0.74rem", fontWeight: 800, color: i === 0 ? "#1d4ed8" : "#64748b" }}>{h.time}</div>
+                            <div style={{ fontSize: "1.3rem", margin: "0.3rem 0" }}>
+                              {h.weatherCode === 0 ? "☀️" : h.weatherCode <= 3 ? "⛅" : h.weatherCode >= 61 ? "🌧️" : "🌤️"}
+                            </div>
+                            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#0f172a" }}>{h.temp}°</div>
+                            <div style={{ fontSize: "0.68rem", color: "#64748b", marginTop: "0.2rem" }}>
+                              {h.rainProb > 0 ? `💧 ${h.rainProb}%` : h.condition}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 7-Day Agricultural Outlook */}
+                    <div>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#0f172a", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <Calendar size={15} style={{ color: "#059669" }} />
+                        7-Day Village Weather Outlook
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(115px, 1fr))", gap: "0.75rem" }}>
+                        {weatherData.dailyForecast.map((d, i) => (
+                          <div key={i} style={{ background: i === 0 ? "#f8fafc" : "#ffffff", border: "1px solid #e2e8f0", borderRadius: 14, padding: "1rem 0.6rem", textAlign: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+                            <div style={{ fontSize: "0.78rem", fontWeight: 800, color: i === 0 ? "#059669" : "#334155" }}>{d.dayName}</div>
+                            <div style={{ fontSize: "1.6rem", margin: "0.4rem 0" }}>
+                              {d.weatherCode === 0 ? "☀️" : d.weatherCode <= 3 ? "⛅" : d.weatherCode >= 61 ? "🌧️" : "🌤️"}
+                            </div>
+                            <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a" }}>
+                              {d.tempMax}° <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#94a3b8" }}>{d.tempMin}°</span>
+                            </div>
+                            <div style={{ fontSize: "0.7rem", fontWeight: 700, color: d.rainProb > 40 ? "#2563eb" : "#64748b", marginTop: "0.3rem" }}>
+                              {d.rainProb > 0 ? `💧 ${d.rainProb}%` : d.condition}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+
               </div>
             </div>
           )}
