@@ -9,6 +9,7 @@ import {
   clearSession,
 } from "@/services/demoSession";
 import type { DemoPanchayat } from "@/types";
+import IndianNationalEmblem from "@/components/IndianNationalEmblem";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -308,6 +309,9 @@ export default function PanchayatDashboard() {
 
         {/* Scrollable content */}
         <div className="panchayat-content">
+
+          {/* Low opacity Indian National Emblem Watermark */}
+          <IndianNationalEmblem opacity={0.045} className="emblem-watermark" />
 
           {/* Background orbs (subtle) */}
           <div className="orb orb-1" style={{ opacity: 0.5 }} />

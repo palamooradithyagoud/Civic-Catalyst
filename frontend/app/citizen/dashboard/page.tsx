@@ -9,6 +9,7 @@ import {
 } from "@/services/demoSession";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { DemoVillager } from "@/types";
+import IndianNationalEmblem from "@/components/IndianNationalEmblem";
 import {
   MapPin,
   FileText,
@@ -85,7 +86,9 @@ export default function CitizenDashboard() {
       <div className="gov-content">
         <DashboardHeader title="Nivaaran AI" subtitle={session.village} role="villager" />
 
-        <main className="gov-main">
+        <main className="gov-main" style={{ position: "relative" }}>
+
+          <IndianNationalEmblem opacity={0.04} className="emblem-watermark citizen" />
 
           <div className="hero-banner citizen fade-up fade-up-1">
             <div className="hero-eyebrow citizen">
