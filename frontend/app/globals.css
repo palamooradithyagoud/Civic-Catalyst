@@ -2420,10 +2420,11 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 0;
-  color: #042d20;
-  opacity: 0.04 !important;
+  opacity: 0.06 !important;
   user-select: none;
-  filter: grayscale(100%);
+  filter: contrast(120%);
+  max-width: 380px;
+  height: auto;
 }
 
 .emblem-watermark.citizen {
@@ -2431,5 +2432,5 @@
   top: 350px;
   left: 50%;
   transform: translateX(-50%);
-  opacity: 0.035 !important;
+  opacity: 0.05 !important;
 }
