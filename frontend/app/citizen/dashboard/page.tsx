@@ -40,6 +40,7 @@ import {
   Filter,
 } from "lucide-react";
 import { analyzeIssueImage, reverseGeocodeLocation } from "@/services/complaintsApi";
+import VillagerWeatherDashboard from "@/components/VillagerWeatherDashboard";
 
 // ── Demo Data ────────────────────────────────────────────────────────────────
 
@@ -842,37 +843,7 @@ export default function CitizenDashboard() {
 
           {/* ── WEATHER TAB ───────────────────────────────────── */}
           {currentTab === "weather" && (
-            <div className="fade-up fade-up-2">
-              <div className="glass-card" style={{ padding: "1.5rem" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <CloudSun style={{ width: 24, height: 24, color: "#3b82f6" }} />
-                  </div>
-                  <div>
-                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>Weather &amp; Farming Forecast</h2>
-                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: 0 }}>Current temperature &amp; 7-day outlook for {session.village}</p>
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem", marginBottom: "1.5rem" }}>
-                  <div style={{ background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)", color: "white", borderRadius: 16, padding: "1.25rem" }}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.85 }}>Temperature</div>
-                    <div style={{ fontSize: "2.25rem", fontWeight: 900, margin: "0.3rem 0" }}>32°C</div>
-                    <div style={{ fontSize: "0.78rem", opacity: 0.9 }}>Partly Cloudy · Humidity 68%</div>
-                  </div>
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: "1.25rem" }}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>Wind Speed</div>
-                    <div style={{ fontSize: "2.25rem", fontWeight: 900, color: "#0f172a", margin: "0.3rem 0" }}>14 km/h</div>
-                    <div style={{ fontSize: "0.78rem", color: "#059669", fontWeight: 600 }}>Gentle Breeze · South-West</div>
-                  </div>
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: "1.25rem" }}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>Rainfall Forecast</div>
-                    <div style={{ fontSize: "2.25rem", fontWeight: 900, color: "#0f172a", margin: "0.3rem 0" }}>20%</div>
-                    <div style={{ fontSize: "0.78rem", color: "#0284c7", fontWeight: 600 }}>Light scattered shower expected Fri</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <VillagerWeatherDashboard session={session} />
           )}
 
           {/* ── MARKET TAB ────────────────────────────────────── */}
