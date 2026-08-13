@@ -72,15 +72,23 @@ import {
   X,
   Check,
   Globe,
+  Home,
+  Hospital,
+  Truck,
+  Building,
 } from "lucide-react";
 
 export default function AshaInventoryDashboardPage() {
   const router = useRouter();
   const [session, setSession] = useState<DemoAshaWorker | null>(null);
 
+  // Portal Mode State ("village" vs "mandal")
+  const [portalMode, setPortalMode] = useState<"village" | "mandal">("village");
+  const [selectedMandalVillage, setSelectedMandalVillage] = useState<string>("ALL");
+
   // Active Tab State
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "inventory" | "distribute" | "history" | "alerts" | "analytics" | "transactions"
+    "dashboard" | "mandal" | "inventory" | "distribute" | "history" | "alerts" | "analytics" | "transactions"
   >("dashboard");
 
   // Language State (English, Hindi, Telugu)
@@ -90,6 +98,14 @@ export default function AshaInventoryDashboardPage() {
     const saved = localStorage.getItem("asha_lang") as Language;
     if (saved && (saved === "en" || saved === "hi" || saved === "te")) {
       setLang(saved);
+    }
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const modeParam = params.get("mode");
+      if (modeParam === "mandal") {
+        setPortalMode("mandal");
+        setActiveTab("mandal");
+      }
     }
   }, []);
 
@@ -363,31 +379,40 @@ export default function AshaInventoryDashboardPage() {
       <aside className="panchayat-sidebar">
         {/* Brand Header */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon" style={{ background: "linear-gradient(135deg, #047857, #10b981)" }}>
-            <Package style={{ width: 20, height: 20, color: "#ffffff" }} />
+          <div className="sidebar-logo-icon" style={{ background: portalMode === "mandal" ? "linear-gradient(135deg, #0f766e, #0d9488)" : "linear-gradient(135deg, #047857, #10b981)" }}>
+            {portalMode === "mandal" ? <Hospital style={{ width: 20, height: 20, color: "#ffffff" }} /> : <Package style={{ width: 20, height: 20, color: "#ffffff" }} />}
           </div>
           <div>
             <div className="sidebar-logo-name" style={{ fontSize: "1.05rem" }}>
-              {t("systemTitle")}
+              {portalMode === "mandal" ? "Mandal Health HQ" : t("systemTitle")}
             </div>
-            <div className="sidebar-logo-version" style={{ color: "#059669", fontWeight: 700 }}>
-              {t("subTitle")}
+            <div className="sidebar-logo-version" style={{ color: portalMode === "mandal" ? "#0d9488" : "#059669", fontWeight: 700 }}>
+              {portalMode === "mandal" ? "Central Hospital Depot" : t("subTitle")}
             </div>
           </div>
         </div>
 
         {/* Navigation Section */}
-        <p className="sidebar-section-label">{t("inventoryWorkspaces")}</p>
+        <p className="sidebar-section-label">
+          {portalMode === "mandal" ? "MANDAL HOSPITAL WORKSPACES" : t("inventoryWorkspaces")}
+        </p>
         <nav className="sidebar-nav">
-          {[
-            { id: "dashboard", label: t("navDashboard"), icon: LayoutDashboard, badge: null },
-            { id: "inventory", label: t("navInventory"), icon: Package, badge: items.length },
-            { id: "distribute", label: t("navDistribute"), icon: SendHorizontal, badge: null },
-            { id: "history", label: t("navHistory"), icon: History, badge: distributions.length },
-            { id: "alerts", label: t("navAlerts"), icon: AlertTriangle, badge: alerts.length, alert: alerts.length > 0 },
-            { id: "analytics", label: t("navAnalytics"), icon: BarChart3, badge: null },
-            { id: "transactions", label: t("navTransactions"), icon: FileSpreadsheet, badge: transactions.length },
-          ].map((tab) => {
+          {(portalMode === "mandal"
+            ? [
+                { id: "mandal", label: "Shortages & Deliveries", icon: Hospital, badge: items.filter(i => i.current_quantity === 0).length, alert: items.filter(i => i.current_quantity === 0).length > 0 },
+                { id: "transactions", label: "Dispatched Delivery Logs", icon: Truck, badge: transactions.length },
+                { id: "alerts", label: "Village Stock Alerts", icon: AlertTriangle, badge: alerts.length, alert: alerts.length > 0 },
+              ]
+            : [
+                { id: "dashboard", label: t("navDashboard"), icon: LayoutDashboard, badge: null },
+                { id: "inventory", label: t("navInventory"), icon: Package, badge: items.length },
+                { id: "distribute", label: t("navDistribute"), icon: SendHorizontal, badge: null },
+                { id: "history", label: t("navHistory"), icon: History, badge: distributions.length },
+                { id: "alerts", label: t("navAlerts"), icon: AlertTriangle, badge: alerts.length, alert: alerts.length > 0 },
+                { id: "analytics", label: t("navAnalytics"), icon: BarChart3, badge: null },
+                { id: "transactions", label: t("navTransactions"), icon: FileSpreadsheet, badge: transactions.length },
+              ]
+          ).map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -418,9 +443,13 @@ export default function AshaInventoryDashboardPage() {
 
         {/* Sidebar Footer Info */}
         <div className="sidebar-bottom">
-          <div style={{ padding: "0.75rem", background: "#f0fdf4", borderRadius: "10px", border: "1px solid #bbf7d0", marginBottom: "0.75rem" }}>
-            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#047857" }}>{t("phcCenter")}</div>
-            <div style={{ fontSize: "0.72rem", color: "#166534" }}>{t("phcDepot")}</div>
+          <div style={{ padding: "0.75rem", background: portalMode === "mandal" ? "#f0fdfa" : "#f0fdf4", borderRadius: "10px", border: portalMode === "mandal" ? "1px solid #99f6e4" : "1px solid #bbf7d0", marginBottom: "0.75rem" }}>
+            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: portalMode === "mandal" ? "#0f766e" : "#047857" }}>
+              {portalMode === "mandal" ? "Mandal Health Headquarters" : t("phcCenter")}
+            </div>
+            <div style={{ fontSize: "0.72rem", color: portalMode === "mandal" ? "#115e59" : "#166534" }}>
+              {portalMode === "mandal" ? "Central Medical Depot · All Villages" : t("phcDepot")}
+            </div>
           </div>
           <button
             className="sidebar-bottom-item danger"
@@ -441,7 +470,8 @@ export default function AshaInventoryDashboardPage() {
         <header className="panchayat-topbar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "0.875rem 1.5rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
             <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>
-              {activeTab === "dashboard" && t("tabDashboard")}
+              {activeTab === "dashboard" && (portalMode === "mandal" ? "Mandal Hospital HQ" : t("tabDashboard"))}
+              {activeTab === "mandal" && "Mandal Hospital Office"}
               {activeTab === "inventory" && t("tabInventory")}
               {activeTab === "distribute" && t("tabDistribute")}
               {activeTab === "history" && t("tabHistory")}
@@ -449,6 +479,7 @@ export default function AshaInventoryDashboardPage() {
               {activeTab === "analytics" && t("tabAnalytics")}
               {activeTab === "transactions" && t("tabTransactions")}
             </div>
+
             <span
               style={{
                 fontSize: "0.72rem",
@@ -559,8 +590,226 @@ export default function AshaInventoryDashboardPage() {
         {/* Content Container */}
         <div className="panchayat-content" style={{ padding: "1.5rem", position: "relative" }}>
 
+          {/* ── TAB: MANDAL HOSPITAL OFFICE WORKSPACE ──────────────────────── */}
+          {(activeTab === "mandal" || portalMode === "mandal") && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              {/* Mandal Hospital Header Banner */}
+              <div
+                style={{
+                  background: "linear-gradient(135deg, #0f766e 0%, #064e3b 100%)",
+                  borderRadius: "16px",
+                  padding: "1.5rem",
+                  color: "white",
+                  boxShadow: "0 10px 30px rgba(15, 118, 110, 0.2)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "1rem"
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+                    <span style={{ background: "rgba(255,255,255,0.2)", padding: "0.2rem 0.6rem", borderRadius: "999px", fontSize: "0.7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      🏥 Mandal Health Headquarters
+                    </span>
+                    <span style={{ background: "#fef08a", color: "#854d0e", padding: "0.2rem 0.6rem", borderRadius: "999px", fontSize: "0.7rem", fontWeight: 800 }}>
+                      Central Medical Stock Depot
+                    </span>
+                  </div>
+                  <h2 style={{ fontSize: "1.5rem", fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>
+                    Mandal Hospital & Health Office HQ
+                  </h2>
+                  <p style={{ fontSize: "0.82rem", opacity: 0.9, marginTop: "0.3rem" }}>
+                    Centralized stock oversight across ALL villages under Mandal · 1-Click Village Automated Replenishment & Dispatch
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <button
+                    onClick={() => {
+                      setPortalMode("village");
+                      setActiveTab("dashboard");
+                    }}
+                    style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", color: "white", padding: "0.6rem 1rem", borderRadius: "10px", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+                  >
+                    <Home size={15} />
+                    Switch to Village ASHA Portal
+                  </button>
+                </div>
+              </div>
+
+              {/* Mandal Overview KPIs */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
+                <div style={{ background: "#fef2f2", padding: "1.2rem", borderRadius: "14px", border: "2px solid #fca5a5" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#991b1b" }}>⚠️ Village Out-of-Stock Items</div>
+                  <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "#dc2626", marginTop: "0.2rem" }}>
+                    {items.filter(i => i.current_quantity === 0 || i.status === "Out of Stock").length} Shortages
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "#b91c1c", fontWeight: 700 }}>Action Required: Deliver Stock from Mandal</div>
+                </div>
+
+                <div style={{ background: "#fffbe8", padding: "1.2rem", borderRadius: "14px", border: "1px solid #fde68a" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#92400e" }}>⚡ Village Low-Stock Warnings</div>
+                  <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "#d97706", marginTop: "0.2rem" }}>
+                    {items.filter(i => i.status === "Low Stock").length} Items
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "#b45309", fontWeight: 700 }}>Below Minimum Safety Level</div>
+                </div>
+
+                <div style={{ background: "#f0fdf4", padding: "1.2rem", borderRadius: "14px", border: "1px solid #bbf7d0" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#166534" }}>📦 Total Deliveries Dispatched</div>
+                  <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "#047857", marginTop: "0.2rem" }}>
+                    {transactions.filter(t => t.reference?.includes("MANDAL") || t.notes?.includes("Mandal") || t.notes?.includes("District")).length || transactions.length} Deliveries
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "#15803d", fontWeight: 700 }}>Mandal HQ → Village Sub-Centers</div>
+                </div>
+              </div>
+
+              {/* SECTION 1: VILLAGE STOCK SHORTAGES & MANDAL DELIVERY ACTION */}
+              <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", border: "2px solid #fca5a5", boxShadow: "0 4px 14px rgba(220, 38, 38, 0.06)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", borderBottom: "1px solid #fecdd3", paddingBottom: "0.85rem" }}>
+                  <div>
+                    <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#991b1b", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <AlertTriangle size={22} style={{ color: "#dc2626" }} />
+                      🚨 Village Medical Stock Shortages & Required Deliveries
+                    </div>
+                    <div style={{ fontSize: "0.78rem", color: "#7f1d1d", marginTop: "0.2rem" }}>
+                      Real-time inventory shortages reported by village sub-centers. Click <strong>Deliver Stock to Village</strong> to update village inventory from Mandal Hospital.
+                    </div>
+                  </div>
+                </div>
+
+                {items.filter(i => i.current_quantity === 0 || i.status === "Out of Stock" || i.status === "Low Stock").length === 0 ? (
+                  <div style={{ padding: "2rem", textTransform: "none", textAlign: "center", background: "#f0fdf4", borderRadius: "12px", border: "1px solid #bbf7d0" }}>
+                    <CheckCircle2 size={32} style={{ color: "#047857", margin: "0 auto 0.5rem auto" }} />
+                    <div style={{ fontSize: "1rem", fontWeight: 800, color: "#047857" }}>All Village Sub-Centers are Fully Stocked!</div>
+                    <div style={{ fontSize: "0.78rem", color: "#166534", marginTop: "0.25rem" }}>No current shortages or out-of-stock items reported across villages in the Mandal.</div>
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: "1rem" }}>
+                    {items
+                      .filter(i => i.current_quantity === 0 || i.status === "Out of Stock" || i.status === "Low Stock")
+                      .map(item => (
+                        <div key={item.id} style={{ background: item.current_quantity === 0 ? "#fff5f5" : "#fffbeb", padding: "1.1rem", borderRadius: "14px", border: item.current_quantity === 0 ? "2px solid #fca5a5" : "1px solid #fde68a", display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "0.85rem" }}>
+                          <div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a" }}>{item.item_name}</div>
+                                <div style={{ fontSize: "0.72rem", color: "#64748b", marginTop: "0.15rem" }}>Code: <strong>{item.item_id_code}</strong> · {item.category_name}</div>
+                              </div>
+                              <span style={{ fontSize: "0.68rem", fontWeight: 900, padding: "0.2rem 0.55rem", borderRadius: "999px", background: item.current_quantity === 0 ? "#fef2f2" : "#fef3c7", color: item.current_quantity === 0 ? "#dc2626" : "#b45309", border: item.current_quantity === 0 ? "1px solid #fca5a5" : "1px solid #fde68a" }}>
+                                {item.current_quantity === 0 ? "⚠️ OUT OF STOCK" : "⚡ LOW STOCK"}
+                              </span>
+                            </div>
+
+                            <div style={{ background: "rgba(255,255,255,0.7)", padding: "0.6rem 0.75rem", borderRadius: "8px", marginTop: "0.6rem", border: "1px solid rgba(0,0,0,0.05)" }}>
+                              <div style={{ fontSize: "0.75rem", color: "#475569", display: "flex", justifyContent: "space-between" }}>
+                                <span>Target Location:</span>
+                                <strong style={{ color: "#0f172a" }}>Ward 3 & 4 Sub-Center</strong>
+                              </div>
+                              <div style={{ fontSize: "0.75rem", color: "#475569", display: "flex", justifyContent: "space-between", marginTop: "0.25rem" }}>
+                                <span>Current Village Stock:</span>
+                                <strong style={{ color: item.current_quantity === 0 ? "#dc2626" : "#d97706", fontSize: "0.95rem" }}>{item.current_quantity} {item.unit}</strong>
+                              </div>
+                              <div style={{ fontSize: "0.75rem", color: "#475569", display: "flex", justifyContent: "space-between", marginTop: "0.25rem" }}>
+                                <span>Minimum Requirement:</span>
+                                <strong>{item.min_quantity} {item.unit}</strong>
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={async () => {
+                              try {
+                                await restockInventoryItem({
+                                  item_id: item.id,
+                                  quantity: 50,
+                                  batch_number: item.batch_number || "BAT-MANDAL-2026",
+                                  expiry_date: item.expiry_date || "2027-12-31",
+                                  supplier_id: item.supplier_id || 1,
+                                  reference: "MANDAL_HQ_DISPATCH",
+                                  notes: `Delivered 50 ${item.unit} from Mandal Hospital HQ to Village Sub-Center`,
+                                });
+                                showToast(`✓ Delivery Completed! Mandal Hospital successfully delivered 50 ${item.unit} of ${item.item_name} to Village Sub-Center.`);
+                                loadAllData();
+                              } catch (err: any) {
+                                showToast(err.message || "Failed to deliver stock from Mandal HQ", "error");
+                              }
+                            }}
+                            style={{ background: "#047857", color: "white", border: "none", padding: "0.65rem 0.9rem", borderRadius: "10px", fontSize: "0.8rem", fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", width: "100%", boxShadow: "0 2px 6px rgba(4,120,87,0.25)" }}
+                          >
+                            🚚 Deliver 50 Units from Mandal Hospital to Village
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 2: DISPATCHED & DELIVERED SUPPLIES HISTORY */}
+              <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", border: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
+                  <div>
+                    <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <Truck size={20} style={{ color: "#047857" }} />
+                      Dispatched & Delivered Supplies Log (Mandal Hospital HQ → Villages)
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.15rem" }}>
+                      Complete delivery audit trail of medical stock dispatched from Mandal Central Hospital to Village Health Sub-Centers
+                    </div>
+                  </div>
+
+                  <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#047857", background: "#ecfdf5", border: "1px solid #a7f3d0", padding: "0.25rem 0.65rem", borderRadius: "999px" }}>
+                    ✓ Delivery Sync Live
+                  </span>
+                </div>
+
+                {/* Delivery Log Table */}
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0", textTransform: "uppercase", fontSize: "0.7rem", color: "#64748b", fontWeight: 800 }}>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "left" }}>Delivery Ref</th>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "left" }}>Medical Item</th>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "left" }}>Recipient Village Sub-Center</th>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "center" }}>Delivered Quantity</th>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "center" }}>Date & Time</th>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "right" }}>Delivery Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ padding: "1.5rem", textAlign: "center", color: "#94a3b8" }}>
+                            No delivery transactions logged yet. Click 'Deliver Stock to Village' above to initiate a dispatch.
+                          </td>
+                        </tr>
+                      ) : (
+                        transactions.map((tx) => (
+                          <tr key={tx.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "0.75rem 0.85rem", fontWeight: 700, color: "#047857" }}>{tx.transaction_id_code}</td>
+                            <td style={{ padding: "0.75rem 0.85rem", fontWeight: 700, color: "#0f172a" }}>{tx.item_name}</td>
+                            <td style={{ padding: "0.75rem 0.85rem", color: "#475569", fontWeight: 600 }}>Ward 3 & 4 Village Sub-Center</td>
+                            <td style={{ padding: "0.75rem 0.85rem", textAlign: "center", fontWeight: 800, color: "#047857" }}>+{tx.quantity} Units</td>
+                            <td style={{ padding: "0.75rem 0.85rem", textAlign: "center", color: "#64748b" }}>{tx.date}</td>
+                            <td style={{ padding: "0.75rem 0.85rem", textAlign: "right" }}>
+                              <span style={{ padding: "0.2rem 0.6rem", borderRadius: "999px", fontSize: "0.7rem", fontWeight: 800, background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0" }}>
+                                ✓ Delivered & Stocked
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── TAB 1: DASHBOARD OVERVIEW ──────────────────────── */}
-          {activeTab === "dashboard" && (
+          {activeTab === "dashboard" && portalMode === "village" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
               {/* 7 KPI Cards Grid */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
