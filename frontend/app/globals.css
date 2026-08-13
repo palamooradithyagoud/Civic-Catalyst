@@ -2410,3 +2410,26 @@
     transform: translateX(30px);
   }
 }
+
+/* ── Indian National Emblem Watermark (Low Opacity) ── */
+
+.emblem-watermark {
+  position: fixed;
+  top: 52%;
+  left: 55%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 0;
+  color: #042d20;
+  opacity: 0.04 !important;
+  user-select: none;
+  filter: grayscale(100%);
+}
+
+.emblem-watermark.citizen {
+  position: absolute;
+  top: 350px;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0.035 !important;
+}
