@@ -1,22 +1,29 @@
 """
 Nivaaran AI — FastAPI Backend
-Phase 1: Demo session endpoints + health check
+Phase 1: Demo session endpoints + Smart Inventory API
 """
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from routers import demo
+from db import init_db
+from seed_data import seed_database
+from routers import demo, inventory
 from models.schemas import HealthResponse
 
 load_dotenv()
+
+# ── Startup Lifecycle ────────────────────────────────────────────────────────
+
+init_db()
+seed_database(force=False)
 
 # ── App ──────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="Nivaaran AI API",
-    description="AI-assisted civic issue reporting platform for rural communities.",
+    description="AI-assisted civic issue reporting platform & ASHA Smart Inventory System.",
     version="0.1.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -26,7 +33,7 @@ app = FastAPI(
 
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000",
+    "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001",
 ).split(",")
 
 app.add_middleware(
@@ -40,6 +47,7 @@ app.add_middleware(
 # ── Routers ──────────────────────────────────────────────────────────────────
 
 app.include_router(demo.router)
+app.include_router(inventory.router)
 
 # ── Core endpoints ───────────────────────────────────────────────────────────
 
@@ -61,3 +69,4 @@ async def root():
         "docs": "/api/docs",
         "version": "0.1.0",
     }
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   getSession,
@@ -10,103 +10,173 @@ import {
   DEMO_ASHA_WORKER,
 } from "@/services/demoSession";
 import type { DemoAshaWorker } from "@/types";
-import IndianNationalEmblem from "@/components/IndianNationalEmblem";
+import { Language, translations } from "@/lib/translations";
 import {
-  HeartPulse,
-  Users,
-  Baby,
-  Activity,
-  AlertTriangle,
-  Calendar,
-  CheckCircle2,
-  Clock,
-  Droplets,
-  FileText,
-  HelpCircle,
+  fetchDashboardKPIs,
+  fetchInventoryItems,
+  createInventoryItem,
+  restockInventoryItem,
+  distributeInventoryItem,
+  fetchTransactions,
+  fetchDistributions,
+  fetchAlerts,
+  resolveAlert,
+  fetchAnalytics,
+  fetchCategories,
+  fetchSuppliers,
+  triggerReSeed,
+  InventoryItem,
+  InventoryTransaction,
+  DistributionRecord,
+  AlertItem,
+  DashboardKPIs,
+  AnalyticsData,
+  Category,
+  Supplier,
+} from "@/services/inventoryApi";
+
+import {
   LayoutDashboard,
+  Package,
+  SendHorizontal,
+  History,
+  AlertTriangle,
+  BarChart3,
+  FileSpreadsheet,
+  Plus,
+  RefreshCw,
+  Search,
+  Filter,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Building2,
+  UserCheck,
+  Calendar,
+  Layers,
+  Sparkles,
+  Bot,
+  HeartPulse,
   LogOut,
   MapPin,
-  MessageSquare,
-  Plus,
-  Package,
-  Search,
+  HelpCircle,
   Settings,
-  Shield,
-  ShieldAlert,
-  Stethoscope,
+  Pill,
   Syringe,
+  AlertCircle,
   TrendingUp,
-  Zap,
-  Bell,
-  ChevronDown,
-  MoreHorizontal,
-  ArrowRight,
+  ArrowUpRight,
+  ArrowDownRight,
+  ShieldAlert,
+  ChevronRight,
+  X,
+  Check,
+  Globe,
 } from "lucide-react";
 
-// ── Demo ASHA Patient / Visit Data ─────────────────────────────────────────
-
-const PATIENT_VISITS = [
-  {
-    id: "P-101",
-    name: "Lakshmi Narayana",
-    ward: "Ward 3",
-    type: "Maternal Health (7 Months)",
-    risk: "high",
-    lastVisit: "Today, 10:30 AM",
-    status: "HB Low (8.5g) · Iron Tablets Given",
-  },
-  {
-    id: "P-102",
-    name: "Anitha & Baby Sairam",
-    ward: "Ward 4",
-    type: "Infant Immunization (Polio 2)",
-    risk: "normal",
-    lastVisit: "Yesterday, 3:15 PM",
-    status: "Vaccination Done · Next: 10th Sep",
-  },
-  {
-    id: "P-103",
-    name: "Venkatesh (Family of 5)",
-    ward: "Ward 3",
-    type: "Fever & Diarrhea Cluster",
-    risk: "urgent",
-    lastVisit: "Today, 8:45 AM",
-    status: "Escalated to Panchayat Water Testing",
-  },
-  {
-    id: "P-104",
-    name: "Sunitha Rao",
-    ward: "Ward 2",
-    type: "Postnatal Care (PNC Visit 3)",
-    risk: "normal",
-    lastVisit: "12 Aug, 2:00 PM",
-    status: "Mother & Baby Healthy",
-  },
-];
-
-const HEALTH_ESCALATIONS = [
-  {
-    id: "ESC-01",
-    issue: "Dirty Water Supply causing Typhoid & Fever",
-    location: "Ward 3, Near Handpump #2",
-    priority: "HIGH",
-    panchayatStatus: "In Progress (Panchayat Chlorination scheduled)",
-    date: "13 Aug 2026",
-  },
-  {
-    id: "ESC-02",
-    issue: "Stagnant Water Drain Breeding Mosquitoes",
-    location: "Ward 4, Backstreet Drain",
-    priority: "CRITICAL",
-    panchayatStatus: "Pending Action",
-    date: "12 Aug 2026",
-  },
-];
-
-export default function AshaDashboardPage() {
+export default function AshaInventoryDashboardPage() {
   const router = useRouter();
   const [session, setSession] = useState<DemoAshaWorker | null>(null);
 
+  // Active Tab State
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "inventory" | "distribute" | "history" | "alerts" | "analytics" | "transactions"
+  >("dashboard");
+
+  // Language State (English, Hindi, Telugu)
+  const [lang, setLang] = useState<Language>("en");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("asha_lang") as Language;
+    if (saved && (saved === "en" || saved === "hi" || saved === "te")) {
+      setLang(saved);
+    }
+  }, []);
+
+  const changeLanguage = (newLang: Language) => {
+    setLang(newLang);
+    localStorage.setItem("asha_lang", newLang);
+  };
+
+  const t = (key: string): string => {
+    return translations[lang]?.[key] || translations["en"]?.[key] || key;
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "Healthy": return t("statusHealthy");
+      case "Low Stock": return t("statusLowStock");
+      case "Out of Stock": return t("statusOutOfStock");
+      case "Expiring Soon": return t("statusExpiringSoon");
+      case "Expired": return t("statusExpired");
+      default: return status;
+    }
+  };
+
+  // Data Loading & Sync States
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // API Data States
+  const [kpis, setKpis] = useState<DashboardKPIs | null>(null);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
+  const [distributions, setDistributions] = useState<DistributionRecord[]>([]);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+  // Filtering States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<number | "ALL">("ALL");
+  const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
+  const [selectedArea, setSelectedArea] = useState<string>("ALL");
+
+  // Modal States
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [isRestockOpen, setIsRestockOpen] = useState(false);
+  const [isDistributeOpen, setIsDistributeOpen] = useState(false);
+  const [selectedItemForModal, setSelectedItemForModal] = useState<InventoryItem | null>(null);
+
+  // Form States - New Item
+  const [newItemForm, setNewItemForm] = useState({
+    item_name: "",
+    category_id: 1,
+    unit: "Strips",
+    current_quantity: 50,
+    min_quantity: 15,
+    max_quantity: 250,
+    batch_number: "BAT-" + Math.floor(1000 + Math.random() * 9000),
+    expiry_date: "2027-06-30",
+    supplier_id: 1,
+    notes: "",
+  });
+
+  // Form States - Restock
+  const [restockForm, setRestockForm] = useState({
+    item_id: 0,
+    quantity: 50,
+    batch_number: "",
+    expiry_date: "",
+    supplier_id: 1,
+    reference: "PHC_REFILL_DOC",
+    notes: "Restocked from District Warehouse",
+  });
+
+  // Form States - Distribute
+  const [distributeForm, setDistributeForm] = useState({
+    item_id: 0,
+    quantity: 1,
+    beneficiary_ref: "",
+    area_village: "Ward 3",
+    purpose: "Maternal ANC Care",
+    notes: "",
+  });
+  const [distributeError, setDistributeError] = useState<string | null>(null);
+
+  // Initial Session Check & Load
   useEffect(() => {
     let current = getSession();
     if (!current || !isAshaWorker(current)) {
@@ -114,504 +184,1521 @@ export default function AshaDashboardPage() {
       current = DEMO_ASHA_WORKER;
     }
     setSession(current as DemoAshaWorker);
+    loadAllData();
   }, []);
 
-  const handleLogout = () => {
-    clearSession();
-    router.push("/");
+  // Show Toast Auto-dismiss
+  const showToast = (text: string, type: "success" | "error" = "success") => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const getHour = () => {
-    const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 17) return "Good afternoon";
-    return "Good evening";
+  // Load All Data from API
+  const loadAllData = async () => {
+    setLoading(true);
+    setSyncing(true);
+    try {
+      const [kpiRes, itemRes, txRes, distRes, alertRes, analyticsRes, catRes, supRes] = await Promise.all([
+        fetchDashboardKPIs(),
+        fetchInventoryItems(),
+        fetchTransactions(),
+        fetchDistributions(),
+        fetchAlerts(),
+        fetchAnalytics(),
+        fetchCategories(),
+        fetchSuppliers(),
+      ]);
+
+      setKpis(kpiRes);
+      setItems(itemRes);
+      setTransactions(txRes);
+      setDistributions(distRes);
+      setAlerts(alertRes);
+      setAnalytics(analyticsRes);
+      setCategories(catRes);
+      setSuppliers(supRes);
+
+      if (distributeForm.item_id === 0 && itemRes.length > 0) {
+        setDistributeForm((prev) => ({ ...prev, item_id: itemRes[0].id }));
+      }
+    } catch (err: any) {
+      console.error("Failed to load inventory data:", err);
+      showToast(err.message || "Failed to load database records.", "error");
+    } finally {
+      setLoading(false);
+      setSyncing(false);
+    }
   };
+
+  // Handle Create New Item Submit
+  const handleCreateItemSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await createInventoryItem(newItemForm);
+      showToast(`Successfully created item '${newItemForm.item_name}'.`);
+      setIsAddItemOpen(false);
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message || "Error creating inventory item", "error");
+    }
+  };
+
+  // Handle Restock Submit
+  const handleRestockSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!restockForm.item_id) return;
+    try {
+      await restockInventoryItem(restockForm);
+      showToast(`Restock successful (+${restockForm.quantity} units).`);
+      setIsRestockOpen(false);
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message || "Error restocking item", "error");
+    }
+  };
+
+  // Handle Distribute Submit
+  const handleDistributeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDistributeError(null);
+    if (!distributeForm.item_id || !distributeForm.beneficiary_ref.trim()) {
+      setDistributeError("Please specify a valid beneficiary reference or household ID.");
+      return;
+    }
+
+    try {
+      const res = await distributeInventoryItem(distributeForm);
+      showToast(res.message);
+      setIsDistributeOpen(false);
+      setDistributeForm((prev) => ({ ...prev, beneficiary_ref: "", notes: "" }));
+      loadAllData();
+    } catch (err: any) {
+      setDistributeError(err.message);
+      showToast(err.message || "Distribution error", "error");
+    }
+  };
+
+  // Quick Open Restock Modal for specific item
+  const openRestockForItem = (item: InventoryItem) => {
+    setSelectedItemForModal(item);
+    setRestockForm({
+      item_id: item.id,
+      quantity: 30,
+      batch_number: item.batch_number || "",
+      expiry_date: item.expiry_date || "",
+      supplier_id: item.supplier_id || 1,
+      reference: "PHC_REFILL",
+      notes: `Restocking for ${item.item_name}`,
+    });
+    setIsRestockOpen(true);
+  };
+
+  // Quick Open Distribute Modal for specific item
+  const openDistributeForItem = (item: InventoryItem) => {
+    setSelectedItemForModal(item);
+    setDistributeForm({
+      item_id: item.id,
+      quantity: 1,
+      beneficiary_ref: "",
+      area_village: "Ward 3",
+      purpose: "Maternal ANC Care",
+      notes: "",
+    });
+    setDistributeError(null);
+    setIsDistributeOpen(true);
+  };
+
+  // Filtered Inventory Items
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const matchesSearch =
+        !searchQuery ||
+        item.item_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.item_id_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.batch_number && item.batch_number.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const matchesCat = selectedCategory === "ALL" || item.category_id === selectedCategory;
+      const matchesStatus =
+        selectedStatus === "ALL" || item.status.toLowerCase().replace(/\s+/g, "_") === selectedStatus.toLowerCase();
+
+      return matchesSearch && matchesCat && matchesStatus;
+    });
+  }, [items, searchQuery, selectedCategory, selectedStatus]);
+
+  // Selected Item for Distribute Form in Distribute Tab
+  const selectedDistributeItem = useMemo(() => {
+    return items.find((i) => i.id === distributeForm.item_id) || items[0];
+  }, [items, distributeForm.item_id]);
 
   if (!session) return null;
 
-  const NAV_ITEMS = [
-    { icon: LayoutDashboard, label: "Dashboard", active: true },
-    { icon: Baby, label: "Maternal & Child", badge: "4 Risk" },
-    { icon: Package, label: "Inventory", badge: "Good" },
-    { icon: Syringe, label: "Immunization", active: false },
-    { icon: MapPin, label: "Ward Health Map", active: false },
-    { icon: ShieldAlert, label: "Epidemic Alerts", active: false },
-  ];
-
   return (
-    <div className="panchayat-shell">
-      {/* ── SIDEBAR ──────────────────────────────────────────── */}
+    <div className="panchayat-shell" style={{ background: "#f8fafc", color: "#0f172a" }}>
+      {/* ── TOAST NOTIFICATION BANNER ──────────────────────── */}
+      {toastMessage && (
+        <div
+          style={{
+            position: "fixed",
+            top: "20px",
+            right: "20px",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            padding: "0.875rem 1.25rem",
+            borderRadius: "12px",
+            background: toastMessage.type === "success" ? "#047857" : "#b91c1c",
+            color: "white",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+            fontWeight: 600,
+            fontSize: "0.875rem",
+          }}
+        >
+          {toastMessage.type === "success" ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
+
+      {/* ── SIDEBAR NAVIGATION ────────────────────────────── */}
       <aside className="panchayat-sidebar">
         {/* Brand Header */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">
-            <HeartPulse style={{ width: 18, height: 18, color: "#ffffff" }} />
+          <div className="sidebar-logo-icon" style={{ background: "linear-gradient(135deg, #047857, #10b981)" }}>
+            <Package style={{ width: 20, height: 20, color: "#ffffff" }} />
           </div>
           <div>
-            <div className="sidebar-logo-name">Nivaaran AI</div>
-            <div className="sidebar-logo-version">ASHA Portal · v1.0</div>
+            <div className="sidebar-logo-name" style={{ fontSize: "1.05rem" }}>
+              {t("systemTitle")}
+            </div>
+            <div className="sidebar-logo-version" style={{ color: "#059669", fontWeight: 700 }}>
+              {t("subTitle")}
+            </div>
           </div>
         </div>
 
-        {/* Navigation */}
-        <p className="sidebar-section-label">ASHA Health Menu</p>
+        {/* Navigation Section */}
+        <p className="sidebar-section-label">{t("inventoryWorkspaces")}</p>
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map(({ icon: Icon, label, active, badge }) => (
-            <div key={label} className={`sidebar-nav-item${active ? " active" : ""}`}>
-              <Icon className="sidebar-nav-icon" />
-              <span className="sidebar-nav-text">{label}</span>
-              {badge && <span className="sidebar-nav-badge">{badge}</span>}
-            </div>
-          ))}
+          {[
+            { id: "dashboard", label: t("navDashboard"), icon: LayoutDashboard, badge: null },
+            { id: "inventory", label: t("navInventory"), icon: Package, badge: items.length },
+            { id: "distribute", label: t("navDistribute"), icon: SendHorizontal, badge: null },
+            { id: "history", label: t("navHistory"), icon: History, badge: distributions.length },
+            { id: "alerts", label: t("navAlerts"), icon: AlertTriangle, badge: alerts.length, alert: alerts.length > 0 },
+            { id: "analytics", label: t("navAnalytics"), icon: BarChart3, badge: null },
+            { id: "transactions", label: t("navTransactions"), icon: FileSpreadsheet, badge: transactions.length },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <div
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`sidebar-nav-item${isActive ? " active" : ""}`}
+                style={{ cursor: "pointer" }}
+              >
+                <Icon className="sidebar-nav-icon" />
+                <span className="sidebar-nav-text">{tab.label}</span>
+                {tab.badge !== null && (
+                  <span
+                    className="sidebar-nav-badge"
+                    style={{
+                      background: tab.alert ? "#fef2f2" : undefined,
+                      color: tab.alert ? "#dc2626" : undefined,
+                      border: tab.alert ? "1px solid #fca5a5" : undefined,
+                    }}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
-        {/* Bottom Actions */}
+        {/* Sidebar Footer Info */}
         <div className="sidebar-bottom">
-          <button className="sidebar-bottom-item">
-            <Settings style={{ width: 16, height: 16 }} />
-            <span className="sidebar-nav-text">Settings</span>
-          </button>
-          <button className="sidebar-bottom-item">
-            <HelpCircle style={{ width: 16, height: 16 }} />
-            <span className="sidebar-nav-text">Support</span>
-          </button>
-          <button className="sidebar-bottom-item danger" onClick={handleLogout}>
+          <div style={{ padding: "0.75rem", background: "#f0fdf4", borderRadius: "10px", border: "1px solid #bbf7d0", marginBottom: "0.75rem" }}>
+            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#047857" }}>{t("phcCenter")}</div>
+            <div style={{ fontSize: "0.72rem", color: "#166534" }}>{t("phcDepot")}</div>
+          </div>
+          <button
+            className="sidebar-bottom-item danger"
+            onClick={() => {
+              clearSession();
+              router.push("/");
+            }}
+          >
             <LogOut style={{ width: 16, height: 16 }} />
-            <span className="sidebar-nav-text">Log out</span>
+            <span className="sidebar-nav-text">{t("logout")}</span>
           </button>
         </div>
       </aside>
 
-      {/* ── BODY ──────────────────────────────────────────── */}
+      {/* ── MAIN BODY CONTAINER ───────────────────────────── */}
       <div className="panchayat-body">
         {/* Top Header Bar */}
-        <header className="panchayat-topbar">
-          <div className="topbar-right">
-            <button className="topbar-icon-btn" title="Messages">
-              <MessageSquare style={{ width: 15, height: 15 }} />
-            </button>
-            <button className="topbar-icon-btn" title="2 Health Alerts">
-              <Bell style={{ width: 15, height: 15 }} />
-              <span className="topbar-notif-dot">2</span>
+        <header className="panchayat-topbar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "0.875rem 1.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>
+              {activeTab === "dashboard" && t("tabDashboard")}
+              {activeTab === "inventory" && t("tabInventory")}
+              {activeTab === "distribute" && t("tabDistribute")}
+              {activeTab === "history" && t("tabHistory")}
+              {activeTab === "alerts" && t("tabAlerts")}
+              {activeTab === "analytics" && t("tabAnalytics")}
+              {activeTab === "transactions" && t("tabTransactions")}
+            </div>
+            <span
+              style={{
+                fontSize: "0.72rem",
+                fontWeight: 700,
+                color: "#047857",
+                background: "#ecfdf5",
+                border: "1px solid #a7f3d0",
+                padding: "0.2rem 0.6rem",
+                borderRadius: "999px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+              }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} />
+              {t("liveSync")}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {/* Language Selector Dropdown */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#f8fafc", padding: "0.35rem 0.65rem", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
+              <Globe size={15} style={{ color: "#047857" }} />
+              <select
+                value={lang}
+                onChange={(e) => changeLanguage(e.target.value as Language)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontSize: "0.78rem",
+                  fontWeight: 800,
+                  color: "#0f172a",
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="en">🇬🇧 English</option>
+                <option value="hi">🇮🇳 हिंदी (Hindi)</option>
+                <option value="te">🇮🇳 తెలుగు (Telugu)</option>
+              </select>
+            </div>
+
+            <button
+              onClick={loadAllData}
+              disabled={syncing}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                padding: "0.45rem 0.85rem",
+                borderRadius: "8px",
+                background: "#ffffff",
+                border: "1px solid #cbd5e1",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                color: "#334155",
+                cursor: "pointer",
+              }}
+            >
+              <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
+              <span>{syncing ? t("syncing") : t("syncData")}</span>
             </button>
 
-            <div className="topbar-profile">
-              <div className="topbar-avatar" style={{ background: "#059669" }}>
+            <button
+              onClick={() => {
+                setRestockForm({
+                  item_id: items[0]?.id || 1,
+                  quantity: 50,
+                  batch_number: "",
+                  expiry_date: "",
+                  supplier_id: 1,
+                  reference: "PHC_REFILL",
+                  notes: "Manual Restock Request",
+                });
+                setIsRestockOpen(true);
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                padding: "0.45rem 0.85rem",
+                borderRadius: "8px",
+                background: "#047857",
+                color: "white",
+                border: "none",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              <Plus size={14} />
+              <span>+ {t("btnRestock")}</span>
+            </button>
+
+            {/* Profile Pill */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", paddingLeft: "0.5rem", borderLeft: "1px solid #e2e8f0" }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#064e3b", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "0.85rem" }}>
                 SD
               </div>
               <div>
-                <div className="topbar-profile-name">Sunita Devi (ASHA)</div>
-                <div className="topbar-profile-role">PHC Ward 3 & 4</div>
+                <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#0f172a" }}>Sunita Devi</div>
+                <div style={{ fontSize: "0.68rem", color: "#64748b" }}>{t("wardInfo")}</div>
               </div>
-              <ChevronDown style={{ width: 12, height: 12, color: "#94a3b8", marginLeft: "0.25rem" }} />
             </div>
           </div>
         </header>
 
-        {/* Scrollable Dashboard Content */}
-        <div className="panchayat-content">
-          {/* Official Indian National Emblem Watermark */}
-          <IndianNationalEmblem opacity={0.06} className="emblem-watermark" />
+        {/* Content Container */}
+        <div className="panchayat-content" style={{ padding: "1.5rem", position: "relative" }}>
 
-          {/* Background Ambient Orbs */}
-          <div className="orb orb-1" style={{ opacity: 0.5 }} />
-          <div className="orb orb-2" style={{ opacity: 0.4 }} />
-
-          {/* Greeting Row */}
-          <div className="greeting-row fade-up fade-up-1">
-            <div>
-              <h1 className="greeting-title" style={{ display: "inline-flex", alignItems: "center" }}>
-                {getHour()}, Sunita Devi
-                <div className="weather-widget-box" title="Live Weather">
-                  <div className="container">
-                    <div className="sun sunshine" />
-                    <div className="sun" />
-                    <div className="cloud back">
-                      <span className="left-back" />
-                      <span className="right-back" />
-                    </div>
-                    <div className="cloud front">
-                      <span className="left-front" />
-                      <span className="right-front" />
-                    </div>
-                  </div>
-                </div>
-              </h1>
-              <div className="greeting-sub">
-                <MapPin style={{ width: 13, height: 13 }} />
-                {session.village} · Primary Health Centre (PHC) Ward 3 & 4
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", marginLeft: "0.5rem", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#059669", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>
-                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#059669", display: "inline-block", animation: "pulse-dot 2s ease-in-out infinite" }} />
-                  ASHA LIVE
-                </span>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button className="add-report-btn" onClick={() => alert("New Health Survey form opening...")}>
-                <Plus style={{ width: 16, height: 16 }} />
-                New Home Survey
-              </button>
-            </div>
-          </div>
-
-          {/* ── 3-COLUMN DASHBOARD GRID ──────────────────────────── */}
-          <div className="dash-grid fade-up fade-up-2">
-            
-            {/* ── LEFT COLUMN ── */}
-            <div className="dash-col-left">
-              {/* Featured Stat Card */}
-              <div className="featured-stat-card blue">
-                <div>
-                  <div className="featured-stat-label">
-                    <Baby style={{ width: 14, height: 14 }} />
-                    Maternal & Infant Care
-                  </div>
-                  <div className="featured-stat-value" style={{ marginTop: "0.5rem" }}>
-                    38 <span>Mothers</span>
-                  </div>
-                  <div className="featured-stat-sub">
-                    4 High Risk ANC Alerts · 100% ANC Checked
-                  </div>
-                </div>
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", color: "rgba(255,255,255,0.85)", marginBottom: "0.25rem", fontWeight: 600 }}>
-                    <span>Target ANC Visits</span>
-                    <span>38 / 38 (100%)</span>
-                  </div>
-                  <div className="featured-progress">
-                    <div className="featured-progress-fill" style={{ width: "100%" }} />
-                  </div>
-                </div>
-              </div>
-
-              {/* 4 Mini Stat Cards */}
-              <div className="mini-stat-row">
-                <div className="mini-stat-card">
-                  <div className="mini-stat-num">112</div>
-                  <div className="mini-stat-lbl">Immunizations</div>
-                </div>
-                <div className="mini-stat-card">
-                  <div className="mini-stat-num" style={{ color: "#d97706" }}>06</div>
-                  <div className="mini-stat-lbl">Panchayat Sync</div>
-                </div>
-                <div className="mini-stat-card">
-                  <div className="mini-stat-num" style={{ color: "#047857" }}>24</div>
-                  <div className="mini-stat-lbl">Visits Done</div>
-                </div>
-                <div className="mini-stat-card">
-                  <div className="mini-stat-num" style={{ color: "#dc2626" }}>04</div>
-                  <div className="mini-stat-lbl">High Risk</div>
-                </div>
-              </div>
-
-              {/* Weekly Family Visits Chart */}
-              <div className="weekly-chart-card">
-                <div className="chart-header">
-                  <div>
-                    <div className="chart-title">Weekly Family Visits</div>
-                    <div style={{ fontSize: "0.7rem", color: "#64748b" }}>Target: 30 Visits / Week</div>
-                  </div>
-                  <div className="chart-more-btn">
-                    <MoreHorizontal style={{ width: 14, height: 14 }} />
-                  </div>
-                </div>
-
-                <div className="bar-chart">
-                  {[
-                    { day: "M", val: 80, count: 5 },
-                    { day: "T", val: 60, count: 4 },
-                    { day: "W", val: 100, count: 6, today: true },
-                    { day: "T", val: 70, count: 4 },
-                    { day: "F", val: 50, count: 3 },
-                    { day: "S", val: 30, count: 2 },
-                    { day: "S", val: 0, count: 0, empty: true },
-                  ].map((bar, idx) => (
-                    <div key={idx} className="bar-chart-day">
-                      <div
-                        className={`bar-chart-bar ${bar.today ? "today" : bar.empty ? "empty" : "filled"}`}
-                        style={{ height: `${bar.val}%` }}
-                      />
-                      <span className={`bar-chart-lbl ${bar.today ? "today" : ""}`}>{bar.day}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ padding: "0.6rem", background: "#f8faf8", borderRadius: "10px", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <TrendingUp style={{ width: 15, height: 15, color: "#047857", flexShrink: 0 }} />
-                  <span style={{ fontSize: "0.72rem", color: "#042d20", fontWeight: 600 }}>
-                    80% of weekly home visit quota completed (24/30).
-                  </span>
-                </div>
-              </div>
-
-              {/* PHC Center Sync Status */}
-              <div className="glass-card">
-                <div className="glass-card-title" style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                  <Stethoscope style={{ width: 15, height: 15, color: "#047857" }} />
-                  PHC Sync Status
-                </div>
-                <p style={{ fontSize: "0.72rem", color: "#64748b", margin: "0.25rem 0 0.75rem" }}>
-                  Demo Primary Health Centre (PHC)
-                </p>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem", padding: "0.4rem 0.6rem", background: "#f8faf8", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                    <span style={{ color: "#334155", fontWeight: 600 }}>Medicine Stock</span>
-                    <span style={{ color: "#047857", fontWeight: 800 }}>Sufficient</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem", padding: "0.4rem 0.6rem", background: "#f8faf8", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                    <span style={{ color: "#334155", fontWeight: 600 }}>Next Vaccine Drive</span>
-                    <span style={{ color: "#2563eb", fontWeight: 800 }}>18th Aug</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ── CENTER COLUMN ── */}
-            <div className="dash-col-center">
-              {/* Nivaaran AI Epidemic Early Warning Banner */}
-              <div style={{ background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)", border: "1px solid #fde68a", borderRadius: "18px", padding: "1.25rem", position: "relative", overflow: "hidden" }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "10px", background: "#d97706", display: "flex", alignItems: "center", justifyContent: "center", color: "white", flexShrink: 0 }}>
-                    <ShieldAlert style={{ width: 20, height: 20, margin: "auto" }} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "0.875rem", fontWeight: 800, color: "#92400e", marginBottom: "0.25rem" }}>
-                      Nivaaran AI Outbreak Alert: Ward 3 Water Contamination Risk
-                    </div>
-                    <div style={{ fontSize: "0.78rem", color: "#78350f", lineHeight: "1.4" }}>
-                      Detected 4 cases of fever & acute diarrhea near <strong>Handpump #2 (Ward 3)</strong>. High probability of drinking water contamination. Gram Panchayat notified for immediate water testing & chlorination.
-                    </div>
-                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
-                      <button onClick={() => alert("Urgent escalation sent to Gram Panchayat Sarpanch & Sanitation Secretary.")} style={{ background: "#d97706", color: "white", border: "none", borderRadius: "8px", padding: "0.4rem 0.875rem", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                        <AlertTriangle style={{ width: 14, height: 14 }} />
-                        Re-Escalate to Gram Panchayat
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Patient Health Registry & House Visit Tracker */}
-              <div className="complaints-card">
-                <div className="complaints-card-header">
-                  <div>
-                    <div className="complaints-card-title">ASHA Patient & Home Visit Registry</div>
-                    <div style={{ fontSize: "0.7rem", color: "#64748b" }}>Ward 3 & 4 Active Beneficiaries</div>
-                  </div>
-                  <span style={{ fontSize: "0.68rem", fontWeight: 800, padding: "0.2rem 0.55rem", borderRadius: "999px", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0" }}>
-                    4 Active
-                  </span>
-                </div>
-
-                {/* Patient Visit Items */}
-                <div>
-                  {PATIENT_VISITS.map((visit) => (
-                    <div key={visit.id} className="complaint-item" style={{ padding: "1rem 1.25rem" }}>
-                      <div className="complaint-avatar" style={{ background: visit.risk === "urgent" ? "#ef4444" : visit.risk === "high" ? "#f59e0b" : "#059669" }}>
-                        {visit.id.split("-")[1]}
+          {/* ── TAB 1: DASHBOARD OVERVIEW ──────────────────────── */}
+          {activeTab === "dashboard" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              {/* 7 KPI Cards Grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
+                {[
+                  { label: t("kpiTotalItems"), val: kpis?.total_items || 0, sub: t("kpiTotalItemsSub"), icon: Package, color: "#0284c7", bg: "#f0f9ff" },
+                  { label: t("kpiTotalUnits"), val: kpis?.total_stock_units || 0, sub: t("kpiTotalUnitsSub"), icon: Layers, color: "#059669", bg: "#ecfdf5" },
+                  { label: t("kpiLowStock"), val: kpis?.low_stock_count || 0, sub: t("kpiLowStockSub"), icon: AlertTriangle, color: "#d97706", bg: "#fffbe8" },
+                  { label: t("kpiOutOfStock"), val: kpis?.out_of_stock_count || 0, sub: t("kpiOutOfStockSub"), icon: XCircle, color: "#dc2626", bg: "#fef2f2" },
+                  { label: t("kpiDistributed30"), val: kpis?.total_distributed_30days || 0, sub: t("kpiDistributed30Sub"), icon: SendHorizontal, color: "#7c3aed", bg: "#f5f3ff" },
+                  { label: t("kpiExpiringSoon"), val: (kpis?.expiring_soon_count || 0) + (kpis?.expired_count || 0), sub: t("kpiExpiringSoonSub"), icon: Clock, color: "#ea580c", bg: "#fff7ed" },
+                  { label: t("kpiActiveAlerts"), val: alerts.length, sub: t("kpiActiveAlertsSub"), icon: ShieldAlert, color: "#e11d48", bg: "#fff1f2" },
+                ].map((kpi, idx) => {
+                  const Icon = kpi.icon;
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        background: "#ffffff",
+                        borderRadius: "14px",
+                        padding: "1.1rem",
+                        border: "1px solid #e2e8f0",
+                        boxShadow: "0 2px 6px rgba(0,0,0,0.03)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#64748b" }}>{kpi.label}</span>
+                        <div style={{ width: 32, height: 32, borderRadius: "8px", background: kpi.bg, color: kpi.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Icon size={18} />
+                        </div>
                       </div>
-                      <div className="complaint-info">
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <div className="complaint-title">{visit.name}</div>
-                          <span style={{ fontSize: "0.65rem", fontWeight: 700, padding: "0.15rem 0.45rem", borderRadius: "999px", background: visit.risk === "urgent" ? "#fef2f2" : visit.risk === "high" ? "#fffbeb" : "#ecfdf5", color: visit.risk === "urgent" ? "#dc2626" : visit.risk === "high" ? "#d97706" : "#047857", border: `1px solid ${visit.risk === "urgent" ? "#fca5a5" : visit.risk === "high" ? "#fde68a" : "#a7f3d0"}` }}>
-                            {visit.ward} · {visit.risk.toUpperCase()}
+                      <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "#0f172a", lineHeight: "1" }}>{kpi.val}</div>
+                      <div style={{ fontSize: "0.7rem", color: "#64748b" }}>{kpi.sub}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Quick Actions Bar */}
+              <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a" }}>{t("quickActions")}</div>
+                  <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Common stock management shortcuts for field health operations</div>
+                </div>
+                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => setIsAddItemOpen(true)}
+                    style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "0.6rem 1rem", borderRadius: "10px", fontSize: "0.8rem", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}
+                  >
+                    <Plus size={16} />
+                    <span>+ {t("btnAddNew")}</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("distribute")}
+                    style={{ background: "#047857", color: "white", border: "none", padding: "0.6rem 1rem", borderRadius: "10px", fontSize: "0.8rem", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}
+                  >
+                    <SendHorizontal size={16} />
+                    <span>↓ {t("btnDistribute")}</span>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await triggerReSeed();
+                      showToast(t("toastReseedSuccess"));
+                      loadAllData();
+                    }}
+                    style={{ background: "#f8fafc", border: "1px solid #cbd5e1", color: "#475569", padding: "0.6rem 1rem", borderRadius: "10px", fontSize: "0.8rem", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}
+                  >
+                    <RefreshCw size={16} />
+                    <span>{t("reseedData")}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid Layout: Critical Alerts & Top Supplies */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }}>
+                {/* Critical Alert Banners */}
+                <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#991b1b", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <AlertTriangle size={18} />
+                      {t("sectionRecentAlerts")} ({alerts.length})
+                    </div>
+                    <button onClick={() => setActiveTab("alerts")} style={{ fontSize: "0.75rem", fontWeight: 700, color: "#047857", background: "none", border: "none", cursor: "pointer" }}>
+                      {t("viewAllAlerts")}
+                    </button>
+                  </div>
+
+                  {alerts.length === 0 ? (
+                    <div style={{ padding: "1.5rem", textAlign: "center", color: "#047857", background: "#f0fdf4", borderRadius: "10px", fontSize: "0.85rem", fontWeight: 600 }}>
+                      ✅ {t("noAlerts")}
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                      {alerts.slice(0, 4).map((alert) => (
+                        <div
+                          key={alert.id}
+                          style={{
+                            padding: "0.75rem 1rem",
+                            borderRadius: "10px",
+                            background: alert.severity === "CRITICAL" ? "#fef2f2" : "#fffbe8",
+                            border: alert.severity === "CRITICAL" ? "1px solid #fca5a5" : "1px solid #fde68a",
+                            display: "flex",
+                            alignItems: "flex-start",
+                            justifyContent: "space-between",
+                            gap: "0.75rem",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: "0.8rem", fontWeight: 800, color: alert.severity === "CRITICAL" ? "#991b1b" : "#92400e" }}>
+                              {alert.item_name}
+                            </div>
+                            <div style={{ fontSize: "0.72rem", color: alert.severity === "CRITICAL" ? "#b91c1c" : "#b45309", marginTop: "0.2rem" }}>
+                              {alert.message}
+                            </div>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              await resolveAlert(alert.id);
+                              showToast(t("toastAlertResolved"));
+                              loadAllData();
+                            }}
+                            style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "0.2rem 0.5rem", fontSize: "0.68rem", fontWeight: 700, color: "#475569", cursor: "pointer", flexShrink: 0 }}
+                          >
+                            {t("btnResolve")}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Top Critical Items Needing Restock */}
+                <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a" }}>
+                      {t("sectionLowStockRefill")}
+                    </div>
+                    <button onClick={() => setActiveTab("inventory")} style={{ fontSize: "0.75rem", fontWeight: 700, color: "#047857", background: "none", border: "none", cursor: "pointer" }}>
+                      {t("viewCatalog")}
+                    </button>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    {items
+                      .filter((i) => i.current_quantity <= i.min_quantity)
+                      .slice(0, 4)
+                      .map((item) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            padding: "0.65rem 0.85rem",
+                            borderRadius: "10px",
+                            background: "#f8fafc",
+                            border: "1px solid #e2e8f0",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#0f172a" }}>{item.item_name}</div>
+                            <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
+                              {item.category_name} · {t("minThreshold")}: {item.min_quantity} {item.unit}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                            <span
+                              style={{
+                                fontSize: "0.75rem",
+                                fontWeight: 800,
+                                padding: "0.2rem 0.5rem",
+                                borderRadius: "999px",
+                                background: item.current_quantity === 0 ? "#fef2f2" : "#fffbe8",
+                                color: item.current_quantity === 0 ? "#dc2626" : "#d97706",
+                                border: item.current_quantity === 0 ? "1px solid #fca5a5" : "1px solid #fde68a",
+                              }}
+                            >
+                              {item.current_quantity} {item.unit}
+                            </span>
+                            <button
+                              onClick={() => openRestockForItem(item)}
+                              style={{ background: "#047857", color: "white", border: "none", borderRadius: "6px", padding: "0.3rem 0.6rem", fontSize: "0.7rem", fontWeight: 700, cursor: "pointer" }}
+                            >
+                              {t("btnRefill")}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Field Distribution Stream */}
+              <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a", marginBottom: "1rem" }}>
+                  {t("sectionRecentDistributions")}
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#64748b", textAlign: "left" }}>
+                        <th style={{ padding: "0.6rem 0.75rem" }}>{t("colDate")}</th>
+                        <th style={{ padding: "0.6rem 0.75rem" }}>{t("colItemName")}</th>
+                        <th style={{ padding: "0.6rem 0.75rem" }}>{t("colQty")}</th>
+                        <th style={{ padding: "0.6rem 0.75rem" }}>{t("colBeneficiary")}</th>
+                        <th style={{ padding: "0.6rem 0.75rem" }}>{t("colVillage")}</th>
+                        <th style={{ padding: "0.6rem 0.75rem" }}>{t("colPurpose")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {distributions.slice(0, 6).map((dist) => (
+                        <tr key={dist.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                          <td style={{ padding: "0.6rem 0.75rem", color: "#64748b", fontWeight: 600 }}>{dist.date}</td>
+                          <td style={{ padding: "0.6rem 0.75rem", fontWeight: 800, color: "#0f172a" }}>{dist.item_name}</td>
+                          <td style={{ padding: "0.6rem 0.75rem", fontWeight: 800, color: "#047857" }}>
+                            {dist.quantity} {dist.unit}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: "#334155" }}>{dist.beneficiary_ref}</td>
+                          <td style={{ padding: "0.6rem 0.75rem", color: "#64748b" }}>{dist.area_village}</td>
+                          <td style={{ padding: "0.6rem 0.75rem" }}>
+                            <span style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#047857", padding: "0.15rem 0.5rem", borderRadius: "999px", fontSize: "0.7rem", fontWeight: 700 }}>
+                              {dist.purpose}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB 2: INVENTORY MASTER CATALOG ───────────────── */}
+          {activeTab === "inventory" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              {/* Header & Controls Bar */}
+              <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+                  <div>
+                    <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>{t("catalogTitle")}</div>
+                    <div style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                      {t("catalogSub")} ({filteredItems.length})
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsAddItemOpen(true)}
+                    style={{ background: "#047857", color: "white", border: "none", padding: "0.6rem 1.1rem", borderRadius: "10px", fontSize: "0.82rem", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}
+                  >
+                    <Plus size={16} />
+                    <span>+ {t("btnAddNew")}</span>
+                  </button>
+                </div>
+
+                {/* Filter Controls Row */}
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "0.75rem" }}>
+                  {/* Search Bar */}
+                  <div style={{ position: "relative" }}>
+                    <Search size={16} style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                    <input
+                      type="text"
+                      placeholder={t("searchPlaceholder")}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      style={{ width: "100%", padding: "0.55rem 0.75rem 0.55rem 2.25rem", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none" }}
+                    />
+                  </div>
+
+                  {/* Category Dropdown */}
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value === "ALL" ? "ALL" : Number(e.target.value))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white" }}
+                  >
+                    <option value="ALL">{t("filterCategory")} ({categories.length})</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Status Dropdown */}
+                  <select
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white" }}
+                  >
+                    <option value="ALL">{t("filterStatus")}</option>
+                    <option value="healthy">{t("statusHealthy")}</option>
+                    <option value="low_stock">{t("statusLowStock")}</option>
+                    <option value="out_of_stock">{t("statusOutOfStock")}</option>
+                    <option value="expiring_soon">{t("statusExpiringSoon")}</option>
+                    <option value="expired">{t("statusExpired")}</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Master Inventory Table */}
+              <div style={{ background: "#ffffff", borderRadius: "14px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#475569", textAlign: "left" }}>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colItemCode")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colItemName")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colCategory")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colStock")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colBatch")} & {t("colExpiry")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colStatus")}</th>
+                        <th style={{ padding: "0.75rem 1rem", textAlign: "right" }}>{t("colActions")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>
+                            {t("noData")}
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredItems.map((item) => {
+                          const isOut = item.current_quantity === 0;
+                          const isLow = item.current_quantity > 0 && item.current_quantity <= item.min_quantity;
+                          const isExpired = item.status === "Expired";
+                          const isExpiring = item.status === "Expiring Soon";
+
+                          return (
+                            <tr key={item.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                              <td style={{ padding: "0.75rem 1rem", fontWeight: 700, color: "#64748b", fontFamily: "monospace" }}>
+                                {item.item_id_code}
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.item_name}</div>
+                                <div style={{ fontSize: "0.7rem", color: "#64748b" }}>Supplier: {item.supplier_name || "Depot"}</div>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem", color: "#475569", fontWeight: 600 }}>{item.category_name}</td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <div style={{ fontWeight: 800, color: isOut ? "#dc2626" : isLow ? "#d97706" : "#047857" }}>
+                                  {item.current_quantity} {item.unit}
+                                </div>
+                                <div style={{ fontSize: "0.68rem", color: "#94a3b8" }}>
+                                  Min: {item.min_quantity} | Max: {item.max_quantity}
+                                </div>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <div style={{ fontWeight: 600, color: "#334155" }}>{item.batch_number || "N/A"}</div>
+                                <div style={{ fontSize: "0.7rem", color: isExpired ? "#dc2626" : isExpiring ? "#ea580c" : "#64748b", fontWeight: isExpired || isExpiring ? 700 : 400 }}>
+                                  Exp: {item.expiry_date || "N/A"}
+                                </div>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <span
+                                  style={{
+                                    fontSize: "0.72rem",
+                                    fontWeight: 800,
+                                    padding: "0.2rem 0.6rem",
+                                    borderRadius: "999px",
+                                    background: isOut ? "#fef2f2" : isLow ? "#fffbe8" : isExpired ? "#fef2f2" : isExpiring ? "#fff7ed" : "#ecfdf5",
+                                    color: isOut ? "#dc2626" : isLow ? "#d97706" : isExpired ? "#b91c1c" : isExpiring ? "#ea580c" : "#047857",
+                                    border: isOut ? "1px solid #fca5a5" : isLow ? "1px solid #fde68a" : isExpired ? "1px solid #fca5a5" : isExpiring ? "1px solid #ffedd5" : "1px solid #a7f3d0",
+                                  }}
+                                >
+                                  {getStatusLabel(item.status)}
+                                </span>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem", textAlign: "right" }}>
+                                <div style={{ display: "flex", gap: "0.4rem", justifyContent: "flex-end" }}>
+                                  <button
+                                    onClick={() => openRestockForItem(item)}
+                                    style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", borderRadius: "6px", padding: "0.3rem 0.6rem", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer" }}
+                                  >
+                                    + {t("btnRestock")}
+                                  </button>
+                                  <button
+                                    disabled={isOut || isExpired}
+                                    onClick={() => openDistributeForItem(item)}
+                                    style={{
+                                      background: isOut || isExpired ? "#f1f5f9" : "#047857",
+                                      color: isOut || isExpired ? "#94a3b8" : "white",
+                                      border: "none",
+                                      borderRadius: "6px",
+                                      padding: "0.3rem 0.6rem",
+                                      fontSize: "0.72rem",
+                                      fontWeight: 700,
+                                      cursor: isOut || isExpired ? "not-allowed" : "pointer",
+                                    }}
+                                  >
+                                    ↓ {t("btnDistribute")}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB 3: DISTRIBUTE SUPPLIES FORM ────────────────── */}
+          {activeTab === "distribute" && (
+            <div style={{ maxWidth: "720px", margin: "0 auto" }}>
+              <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.75rem", border: "1px solid #e2e8f0", boxShadow: "0 4px 20px rgba(0,0,0,0.04)" }}>
+                <div style={{ borderBottom: "1px solid #e2e8f0", paddingBottom: "1rem", marginBottom: "1.25rem" }}>
+                  <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <SendHorizontal size={22} style={{ color: "#047857" }} />
+                    {t("distributeTitle")}
+                  </div>
+                  <div style={{ fontSize: "0.78rem", color: "#64748b", marginTop: "0.2rem" }}>
+                    {t("distributeSub")}
+                  </div>
+                </div>
+
+                {distributeError && (
+                  <div style={{ padding: "0.875rem 1rem", borderRadius: "10px", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", fontSize: "0.8rem", fontWeight: 700, marginBottom: "1.25rem" }}>
+                    ⚠️ {distributeError}
+                  </div>
+                )}
+
+                <form onSubmit={handleDistributeSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                  {/* Select Supply Item */}
+                  <div>
+                    <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#334155", display: "block", marginBottom: "0.4rem" }}>
+                      {t("selectSupplyToIssue")}
+                    </label>
+                    <select
+                      value={distributeForm.item_id}
+                      onChange={(e) => {
+                        setDistributeForm((prev) => ({ ...prev, item_id: Number(e.target.value) }));
+                        setDistributeError(null);
+                      }}
+                      style={{ width: "100%", padding: "0.65rem 0.875rem", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "0.85rem", outline: "none", background: "white" }}
+                    >
+                      {items.map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {i.item_name} ({i.current_quantity} {i.unit} left) — [{getStatusLabel(i.status)}]
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Selected Item Stock & Expiry Balance Card */}
+                  {selectedDistributeItem && (
+                    <div
+                      style={{
+                        padding: "1rem",
+                        borderRadius: "12px",
+                        background: selectedDistributeItem.current_quantity === 0 ? "#fef2f2" : "#f0fdf4",
+                        border: selectedDistributeItem.current_quantity === 0 ? "1px solid #fca5a5" : "1px solid #bbf7d0",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#0f172a" }}>{selectedDistributeItem.item_name}</div>
+                        <div style={{ fontSize: "0.72rem", color: "#64748b" }}>
+                          Category: {selectedDistributeItem.category_name} | Batch: {selectedDistributeItem.batch_number || "N/A"}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: "1.1rem", fontWeight: 800, color: selectedDistributeItem.current_quantity === 0 ? "#dc2626" : "#047857" }}>
+                          {selectedDistributeItem.current_quantity} {selectedDistributeItem.unit} {t("availableStock")}
+                        </div>
+                        <div style={{ fontSize: "0.7rem", color: selectedDistributeItem.status === "Expired" ? "#dc2626" : "#64748b" }}>
+                          Expiry: {selectedDistributeItem.expiry_date || "N/A"}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quantity & Household Reference */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1rem" }}>
+                    <div>
+                      <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#334155", display: "block", marginBottom: "0.4rem" }}>
+                        {t("qtyToIssue")}
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={selectedDistributeItem?.current_quantity || 100}
+                        value={distributeForm.quantity}
+                        onChange={(e) => setDistributeForm((prev) => ({ ...prev, quantity: Number(e.target.value) }))}
+                        style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "0.85rem", outline: "none" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#334155", display: "block", marginBottom: "0.4rem" }}>
+                        {t("beneficiaryRefLabel")}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={t("beneficiaryRefPlaceholder")}
+                        value={distributeForm.beneficiary_ref}
+                        onChange={(e) => setDistributeForm((prev) => ({ ...prev, beneficiary_ref: e.target.value }))}
+                        style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "0.85rem", outline: "none" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Ward & Purpose */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                    <div>
+                      <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#334155", display: "block", marginBottom: "0.4rem" }}>
+                        {t("villageAreaLabel")}
+                      </label>
+                      <select
+                        value={distributeForm.area_village}
+                        onChange={(e) => setDistributeForm((prev) => ({ ...prev, area_village: e.target.value }))}
+                        style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "0.85rem", outline: "none", background: "white" }}
+                      >
+                        <option value="Ward 1">Ward 1 (North Block)</option>
+                        <option value="Ward 2">Ward 2 (East Block)</option>
+                        <option value="Ward 3">Ward 3 (Central Village)</option>
+                        <option value="Ward 4">Ward 4 (South Colony)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#334155", display: "block", marginBottom: "0.4rem" }}>
+                        {t("purposeLabel")}
+                      </label>
+                      <select
+                        value={distributeForm.purpose}
+                        onChange={(e) => setDistributeForm((prev) => ({ ...prev, purpose: e.target.value }))}
+                        style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "0.85rem", outline: "none", background: "white" }}
+                      >
+                        <option value="Maternal ANC Care">{t("purposeMch")}</option>
+                        <option value="Infant Immunization & Health">{t("purposeImm")}</option>
+                        <option value="Child Health & Nutrition">{t("purposeChild")}</option>
+                        <option value="Emergency Aid">{t("purposeEmg")}</option>
+                        <option value="Routine Field Visit">{t("purposeRtn")}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#334155", display: "block", marginBottom: "0.4rem" }}>
+                      {t("notesLabel")}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={t("notesPlaceholder")}
+                      value={distributeForm.notes}
+                      onChange={(e) => setDistributeForm((prev) => ({ ...prev, notes: e.target.value }))}
+                      style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "0.85rem", outline: "none" }}
+                    />
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={!selectedDistributeItem || selectedDistributeItem.current_quantity === 0 || selectedDistributeItem.status === "Expired"}
+                    style={{
+                      marginTop: "0.5rem",
+                      padding: "0.85rem",
+                      borderRadius: "12px",
+                      background: selectedDistributeItem?.current_quantity === 0 || selectedDistributeItem?.status === "Expired" ? "#cbd5e1" : "#047857",
+                      color: "white",
+                      border: "none",
+                      fontSize: "0.9rem",
+                      fontWeight: 800,
+                      cursor: selectedDistributeItem?.current_quantity === 0 || selectedDistributeItem?.status === "Expired" ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.5rem",
+                      boxShadow: "0 4px 14px rgba(4, 120, 87, 0.2)",
+                    }}
+                  >
+                    <SendHorizontal size={18} />
+                    <span>{t("btnConfirmDistribute")}</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB 4: DISTRIBUTION HISTORY ───────────────────── */}
+          {activeTab === "history" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+                <div>
+                  <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>{t("historyTitle")}</div>
+                  <div style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                    {t("historySub")} ({distributions.length})
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <select
+                    value={selectedArea}
+                    onChange={(e) => setSelectedArea(e.target.value)}
+                    style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.8rem", outline: "none", background: "white" }}
+                  >
+                    <option value="ALL">All Wards / Villages</option>
+                    <option value="Ward 1">Ward 1</option>
+                    <option value="Ward 2">Ward 2</option>
+                    <option value="Ward 3">Ward 3</option>
+                    <option value="Ward 4">Ward 4</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ background: "#ffffff", borderRadius: "14px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#475569", textAlign: "left" }}>
+                        <th style={{ padding: "0.75rem 1rem" }}>Record ID</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colDate")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colItemName")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colQty")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colBeneficiary")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colVillage")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colPurpose")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colRef")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {distributions
+                        .filter((d) => selectedArea === "ALL" || d.area_village === selectedArea)
+                        .map((dist) => (
+                          <tr key={dist.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "0.75rem 1rem", fontWeight: 700, color: "#64748b", fontFamily: "monospace" }}>
+                              #DST-{dist.id}
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem", color: "#475569", fontWeight: 600 }}>{dist.date}</td>
+                            <td style={{ padding: "0.75rem 1rem", fontWeight: 800, color: "#0f172a" }}>{dist.item_name}</td>
+                            <td style={{ padding: "0.75rem 1rem", fontWeight: 800, color: "#047857" }}>
+                              {dist.quantity} {dist.unit}
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem", fontWeight: 700, color: "#1e293b" }}>{dist.beneficiary_ref}</td>
+                            <td style={{ padding: "0.75rem 1rem", color: "#64748b" }}>{dist.area_village}</td>
+                            <td style={{ padding: "0.75rem 1rem" }}>
+                              <span style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "0.15rem 0.5rem", borderRadius: "999px", fontSize: "0.7rem", fontWeight: 700 }}>
+                                {dist.purpose}
+                              </span>
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem", color: "#64748b", fontSize: "0.75rem" }}>{dist.notes || "—"}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB 5: ALERTS CENTER ──────────────────────────── */}
+          {activeTab === "alerts" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>{t("alertsTitle")}</div>
+                  <div style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                    {t("alertsSub")} ({alerts.length})
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1rem" }}>
+                {alerts.map((alert) => {
+                  const targetItem = items.find((i) => i.id === alert.item_id);
+                  return (
+                    <div
+                      key={alert.id}
+                      style={{
+                        background: "#ffffff",
+                        borderRadius: "14px",
+                        padding: "1.25rem",
+                        border: alert.severity === "CRITICAL" ? "1px solid #fca5a5" : "1px solid #fde68a",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.75rem",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span
+                          style={{
+                            fontSize: "0.7rem",
+                            fontWeight: 800,
+                            padding: "0.2rem 0.5rem",
+                            borderRadius: "999px",
+                            background: alert.severity === "CRITICAL" ? "#fef2f2" : "#fffbe8",
+                            color: alert.severity === "CRITICAL" ? "#dc2626" : "#d97706",
+                            border: alert.severity === "CRITICAL" ? "1px solid #fca5a5" : "1px solid #fde68a",
+                          }}
+                        >
+                          {alert.alert_type} · {alert.severity}
+                        </span>
+                        <span style={{ fontSize: "0.68rem", color: "#94a3b8" }}>{alert.created_at.split(" ")[0]}</span>
+                      </div>
+
+                      <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#0f172a" }}>{alert.item_name}</div>
+                      <div style={{ fontSize: "0.78rem", color: "#334155", lineHeight: "1.4" }}>{alert.message}</div>
+
+                      <div style={{ display: "flex", gap: "0.5rem", marginTop: "auto", paddingTop: "0.5rem" }}>
+                        {targetItem && (
+                          <button
+                            onClick={() => openRestockForItem(targetItem)}
+                            style={{ flex: 1, background: "#047857", color: "white", border: "none", borderRadius: "8px", padding: "0.45rem", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer" }}
+                          >
+                            + {t("btnRestock")}
+                          </button>
+                        )}
+                        <button
+                          onClick={async () => {
+                            await resolveAlert(alert.id);
+                            showToast(t("toastAlertResolved"));
+                            loadAllData();
+                          }}
+                          style={{ background: "#f8fafc", border: "1px solid #cbd5e1", color: "#475569", borderRadius: "8px", padding: "0.45rem 0.75rem", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer" }}
+                        >
+                          {t("btnResolve")}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB 6: ANALYTICS & TRENDS ─────────────────────── */}
+          {activeTab === "analytics" && analytics && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>{t("analyticsTitle")}</div>
+                <div style={{ fontSize: "0.78rem", color: "#64748b" }}>{t("analyticsSub")}</div>
+              </div>
+
+              {/* Grid: Category Breakdown & Top Distributed */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }}>
+                {/* Category Stock Breakdown */}
+                <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a", marginBottom: "1rem" }}>
+                    {t("catAllocation")}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    {analytics.category_breakdown.map((cat, idx) => (
+                      <div key={idx}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", fontWeight: 700, color: "#334155", marginBottom: "0.25rem" }}>
+                          <span>{cat.category}</span>
+                          <span>
+                            {cat.total_quantity} units ({cat.item_count} items)
                           </span>
                         </div>
-                        <div style={{ fontSize: "0.72rem", color: "#64748b", margin: "0.15rem 0" }}>{visit.type}</div>
-                        <div style={{ fontSize: "0.72rem", color: "#042d20", fontWeight: 600 }}>{visit.status}</div>
+                        <div style={{ height: "8px", background: "#f1f5f9", borderRadius: "4px", overflow: "hidden" }}>
+                          <div style={{ width: `${Math.min(100, (cat.total_quantity / 500) * 100)}%`, height: "100%", background: "#047857" }} />
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Immunization & ANC Schedule */}
-              <div className="ai-pill-card">
-                <div className="ai-pill-header">
-                  <div className="ai-pill-title" style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                    <Calendar style={{ width: 15, height: 15, color: "#047857" }} />
-                    Upcoming Vaccine Drives & Anganwadi Sync
-                  </div>
-                  <div className="ai-pill-sub">Scheduled drives for Ward 3 & 4</div>
-                </div>
-
-                <div style={{ padding: "1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.6rem 0.875rem", background: "#f8faf8", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                      <Syringe style={{ width: 16, height: 16, color: "#2563eb" }} />
-                      <div>
-                        <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#0f172a" }}>Pulse Polio Drive 2026</div>
-                        <div style={{ fontSize: "0.7rem", color: "#64748b" }}>Booth: Ward 3 Primary School</div>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#2563eb" }}>18 Aug 2026</span>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.6rem 0.875rem", background: "#f8faf8", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                      <Baby style={{ width: 16, height: 16, color: "#047857" }} />
-                      <div>
-                        <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#0f172a" }}>Pregnant Women ANC Health Checkup</div>
-                        <div style={{ fontSize: "0.7rem", color: "#64748b" }}>Anganwadi Center Ward 4</div>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#047857" }}>22 Aug 2026</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ── RIGHT COLUMN ── */}
-            <div className="dash-col-right">
-              {/* Gram Panchayat Health & Sanitation Sync */}
-              <div className="alerts-card">
-                <div className="complaints-card-header">
-                  <div className="complaints-card-title" style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                    <Droplets style={{ width: 15, height: 15, color: "#0284c7" }} />
-                    Gram Panchayat Health Sync
+                    ))}
                   </div>
                 </div>
 
-                <div style={{ padding: "0.875rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                  {HEALTH_ESCALATIONS.map((esc) => (
-                    <div key={esc.id} style={{ padding: "0.75rem", background: "#f8faf8", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
-                        <span style={{ fontSize: "0.65rem", fontWeight: 800, color: "#dc2626", background: "#fef2f2", padding: "0.15rem 0.4rem", borderRadius: "4px", border: "1px solid #fca5a5" }}>
-                          {esc.priority}
+                {/* Top 5 Distributed Supplies */}
+                <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a", marginBottom: "1rem" }}>
+                    {t("topItems")}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    {analytics.top_distributed_items.map((item, idx) => (
+                      <div key={idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.6rem", background: "#f8fafc", borderRadius: "8px" }}>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#0f172a" }}>
+                          {idx + 1}. {item.item_name}
+                        </div>
+                        <span style={{ fontSize: "0.8rem", fontWeight: 800, color: "#047857" }}>
+                          {item.total_distributed} {item.unit}
                         </span>
-                        <span style={{ fontSize: "0.68rem", color: "#64748b" }}>{esc.date}</span>
                       </div>
-                      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#0f172a", marginBottom: "0.2rem" }}>
-                        {esc.issue}
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Distribution Purpose Breakdown */}
+              <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a", marginBottom: "1rem" }}>
+                  {t("purposeBreakdown")}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem" }}>
+                  {analytics.distribution_by_purpose.map((purp, idx) => (
+                    <div key={idx} style={{ padding: "0.85rem", borderRadius: "10px", background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#047857" }}>{purp.purpose}</div>
+                      <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#064e3b", marginTop: "0.2rem" }}>
+                        {purp.total_quantity} units
                       </div>
-                      <div style={{ fontSize: "0.7rem", color: "#64748b", marginBottom: "0.4rem" }}>
-                        {esc.location}
-                      </div>
-                      <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#047857" }}>
-                        Status: {esc.panchayatStatus}
-                      </div>
+                      <div style={{ fontSize: "0.68rem", color: "#166534" }}>{purp.record_count} distribution events</div>
                     </div>
                   ))}
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Vaccine Stock Status Card */}
-              <div className="glass-card">
-                <div className="glass-card-title" style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                  <Syringe style={{ width: 15, height: 15, color: "#16a34a" }} />
-                  Vaccine Kit Inventory
-                </div>
-                <div style={{ marginTop: "0.75rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#334155", fontWeight: 600, marginBottom: "0.2rem" }}>
-                      <span>OPV (Oral Polio Vaccine)</span>
-                      <span style={{ color: "#047857", fontWeight: 800 }}>45 Vials</span>
-                    </div>
-                    <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9", overflow: "hidden" }}>
-                      <div style={{ width: "90%", height: "100%", background: "#059669" }} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#334155", fontWeight: 600, marginBottom: "0.2rem" }}>
-                      <span>Pentavalent & DPT</span>
-                      <span style={{ color: "#047857", fontWeight: 800 }}>28 Vials</span>
-                    </div>
-                    <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9", overflow: "hidden" }}>
-                      <div style={{ width: "70%", height: "100%", background: "#2563eb" }} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#334155", fontWeight: 600, marginBottom: "0.2rem" }}>
-                      <span>Iron & Folic Acid Tablets</span>
-                      <span style={{ color: "#d97706", fontWeight: 800 }}>200 Tabs</span>
-                    </div>
-                    <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9", overflow: "hidden" }}>
-                      <div style={{ width: "50%", height: "100%", background: "#d97706" }} />
-                    </div>
+          {/* ── TAB 7: IMMUTABLE AUDIT LOG ─────────────────────── */}
+          {activeTab === "transactions" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>{t("auditTitle")}</div>
+                  <div style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                    {t("auditSub")} ({transactions.length})
                   </div>
                 </div>
               </div>
 
-              {/* Emergency Healthcare Contacts */}
-              <div className="glass-card" style={{ background: "#f0fdf4", borderColor: "#a7f3d0" }}>
-                <div className="glass-card-title" style={{ color: "#042d20", display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                  <HeartPulse style={{ width: 15, height: 15, color: "#047857" }} />
-                  ASHA Emergency Helpline
+              <div style={{ background: "#ffffff", borderRadius: "14px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#475569", textAlign: "left" }}>
+                        <th style={{ padding: "0.75rem 1rem" }}>TX Code</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colDate")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colItemName")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colTxType")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colQty")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colPrevNew")}</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>{t("colRef")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.map((tx) => {
+                        const isIn = tx.transaction_type === "STOCK_IN";
+                        const isDist = tx.transaction_type === "DISTRIBUTION";
+                        return (
+                          <tr key={tx.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "0.75rem 1rem", fontWeight: 700, color: "#64748b", fontFamily: "monospace" }}>
+                              {tx.transaction_id_code}
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem", color: "#475569" }}>{tx.date}</td>
+                            <td style={{ padding: "0.75rem 1rem", fontWeight: 800, color: "#0f172a" }}>{tx.item_name}</td>
+                            <td style={{ padding: "0.75rem 1rem" }}>
+                              <span
+                                style={{
+                                  fontSize: "0.7rem",
+                                  fontWeight: 800,
+                                  padding: "0.15rem 0.5rem",
+                                  borderRadius: "999px",
+                                  background: isIn ? "#ecfdf5" : isDist ? "#f0f9ff" : "#fffbe8",
+                                  color: isIn ? "#047857" : isDist ? "#0284c7" : "#d97706",
+                                  border: isIn ? "1px solid #a7f3d0" : isDist ? "1px solid #bae6fd" : "1px solid #fde68a",
+                                }}
+                              >
+                                {tx.transaction_type}
+                              </span>
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem", fontWeight: 800, color: isIn ? "#047857" : "#dc2626" }}>
+                              {isIn ? `+${tx.quantity}` : `-${tx.quantity}`}
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem", color: "#475569", fontWeight: 600 }}>
+                              {tx.previous_quantity} → {tx.new_quantity}
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem", color: "#64748b", fontSize: "0.75rem" }}>
+                              {tx.reference || "N/A"} — {tx.notes || ""}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <div style={{ fontSize: "0.72rem", color: "#334155", marginTop: "0.375rem", lineHeight: "1.4" }}>
-                  108 Emergency Ambulance · PHC Medical Officer on-call
-                </div>
-                <button
-                  onClick={() => alert("Connecting to 108 Emergency Rural Healthcare Ambulance Dispatch...")}
-                  style={{ width: "100%", marginTop: "0.75rem", background: "#064e3b", color: "#ffffff", border: "none", borderRadius: "10px", padding: "0.5rem", fontSize: "0.75rem", fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}
-                >
-                  Call 108 Ambulance Dispatch
-                </button>
               </div>
             </div>
-          </div>
-
-          {/* ── BOTTOM TIMELINE CARD ──────────────────────────── */}
-          <div className="timeline-card fade-up fade-up-3" style={{ marginTop: "1.25rem" }}>
-            <div className="chart-header" style={{ marginBottom: "0.875rem" }}>
-              <div>
-                <div className="chart-title" style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                  <Clock style={{ width: 15, height: 15, color: "#047857" }} />
-                  ASHA Daily Visit Timeline · Ward 3 & 4
-                </div>
-                <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
-                  Today: 4 ANC & PNC Home Visits Completed
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{ fontSize: "0.7rem", color: "#047857", fontWeight: 700 }}>
-                  August 13, 2026
-                </span>
-              </div>
-            </div>
-
-            {/* Timeline Ruler */}
-            <div className="timeline-ruler-wrap">
-              <div className="timeline-hours">
-                {["08:00 AM", "10:00 AM", "12:00 PM", "02:00 PM", "04:00 PM", "06:00 PM"].map((h) => (
-                  <span key={h} className="timeline-hour">{h}</span>
-                ))}
-              </div>
-              <div className="timeline-ruler">
-                <div className="timeline-now-line" style={{ left: "62%" }} />
-              </div>
-            </div>
-
-            {/* Timeline Chips */}
-            <div className="timeline-chips">
-              <div className="timeline-chip resolved" style={{ left: "10%" }}>
-                <div className="timeline-chip-icon" style={{ background: "#dcfce7", color: "#15803d" }}>
-                  <CheckCircle2 style={{ width: 11, height: 11 }} />
-                </div>
-                <span>08:45 AM · Ward 3 Fever Cluster Inspection</span>
-              </div>
-
-              <div className="timeline-chip in_progress" style={{ left: "38%" }}>
-                <div className="timeline-chip-icon" style={{ background: "#ecfdf5", color: "#047857" }}>
-                  <Baby style={{ width: 11, height: 11 }} />
-                </div>
-                <span>10:30 AM · ANC Checkup (Lakshmi N.)</span>
-              </div>
-
-              <div className="timeline-chip pending" style={{ left: "68%" }}>
-                <div className="timeline-chip-icon" style={{ background: "#fffbeb", color: "#d97706" }}>
-                  <Syringe style={{ width: 11, height: 11 }} />
-                </div>
-                <span>03:30 PM · Ward 4 Infant Polio Vaccination</span>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
+
+      {/* ── MODAL 1: ADD NEW ITEM MODAL ─────────────────────── */}
+      {isAddItemOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", width: "100%", maxWidth: "560px", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid #e2e8f0", paddingBottom: "0.75rem" }}>
+              <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>{t("modalAddTitle")}</div>
+              <button onClick={() => setIsAddItemOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateItemSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("colItemName")} *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., Paracetamol 500mg, Clean Delivery Kit"
+                  value={newItemForm.item_name}
+                  onChange={(e) => setNewItemForm((prev) => ({ ...prev, item_name: e.target.value }))}
+                  style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("colCategory")} *</label>
+                  <select
+                    value={newItemForm.category_id}
+                    onChange={(e) => setNewItemForm((prev) => ({ ...prev, category_id: Number(e.target.value) }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white", marginTop: "0.2rem" }}
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("colUnit")} *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Strips, Bottles, Kits, Vials, Packs"
+                    value={newItemForm.unit}
+                    onChange={(e) => setNewItemForm((prev) => ({ ...prev, unit: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("colStock")}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={newItemForm.current_quantity}
+                    onChange={(e) => setNewItemForm((prev) => ({ ...prev, current_quantity: Number(e.target.value) }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("colMinQty")}</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={newItemForm.min_quantity}
+                    onChange={(e) => setNewItemForm((prev) => ({ ...prev, min_quantity: Number(e.target.value) }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("colMaxQty")}</label>
+                  <input
+                    type="number"
+                    min={10}
+                    value={newItemForm.max_quantity}
+                    onChange={(e) => setNewItemForm((prev) => ({ ...prev, max_quantity: Number(e.target.value) }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("modalBatchNo")}</label>
+                  <input
+                    type="text"
+                    value={newItemForm.batch_number}
+                    onChange={(e) => setNewItemForm((prev) => ({ ...prev, batch_number: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("modalExpiryDate")}</label>
+                  <input
+                    type="date"
+                    value={newItemForm.expiry_date}
+                    onChange={(e) => setNewItemForm((prev) => ({ ...prev, expiry_date: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button type="button" onClick={() => setIsAddItemOpen(false)} style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#f1f5f9", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "#475569", cursor: "pointer" }}>
+                  {t("btnCancel")}
+                </button>
+                <button type="submit" style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#047857", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "white", cursor: "pointer" }}>
+                  {t("btnSubmit")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 2: RESTOCK STOCK-IN MODAL ─────────────────── */}
+      {isRestockOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", width: "100%", maxWidth: "500px", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid #e2e8f0", paddingBottom: "0.75rem" }}>
+              <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>{t("modalRestockTitle")}</div>
+              <button onClick={() => setIsRestockOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleRestockSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("modalItemSelect")} *</label>
+                <select
+                  value={restockForm.item_id}
+                  onChange={(e) => setRestockForm((prev) => ({ ...prev, item_id: Number(e.target.value) }))}
+                  style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white", marginTop: "0.2rem" }}
+                >
+                  {items.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.item_name} ({t("colStock")}: {i.current_quantity} {i.unit})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("modalQty")} *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={restockForm.quantity}
+                    onChange={(e) => setRestockForm((prev) => ({ ...prev, quantity: Number(e.target.value) }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("modalRefCode")}</label>
+                  <input
+                    type="text"
+                    value={restockForm.reference}
+                    onChange={(e) => setRestockForm((prev) => ({ ...prev, reference: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button type="button" onClick={() => setIsRestockOpen(false)} style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#f1f5f9", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "#475569", cursor: "pointer" }}>
+                  {t("btnCancel")}
+                </button>
+                <button type="submit" style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#047857", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "white", cursor: "pointer" }}>
+                  {t("btnSubmit")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 3: ROW DISTRIBUTE MODAL ──────────────────── */}
+      {isDistributeOpen && selectedItemForModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", width: "100%", maxWidth: "500px", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid #e2e8f0", paddingBottom: "0.75rem" }}>
+              <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>↓ {t("btnDistribute")} '{selectedItemForModal.item_name}'</div>
+              <button onClick={() => setIsDistributeOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {distributeError && (
+              <div style={{ padding: "0.75rem", borderRadius: "8px", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.85rem" }}>
+                ⚠️ {distributeError}
+              </div>
+            )}
+
+            <form onSubmit={handleDistributeSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              <div style={{ padding: "0.75rem", borderRadius: "10px", background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#047857" }}>
+                  {t("availableStock")}: {selectedItemForModal.current_quantity} {selectedItemForModal.unit}
+                </div>
+                <div style={{ fontSize: "0.7rem", color: "#166534" }}>Expiry Date: {selectedItemForModal.expiry_date || "N/A"}</div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("modalQty")} *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={selectedItemForModal.current_quantity}
+                    value={distributeForm.quantity}
+                    onChange={(e) => setDistributeForm((prev) => ({ ...prev, quantity: Number(e.target.value) }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("modalBeneficiary")} *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. HH-101 Lakshmi Narayana"
+                    value={distributeForm.beneficiary_ref}
+                    onChange={(e) => setDistributeForm((prev) => ({ ...prev, beneficiary_ref: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>{t("modalVillage")} *</label>
+                <select
+                  value={distributeForm.area_village}
+                  onChange={(e) => setDistributeForm((prev) => ({ ...prev, area_village: e.target.value }))}
+                  style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white", marginTop: "0.2rem" }}
+                >
+                  <option value="Ward 1">Ward 1</option>
+                  <option value="Ward 2">Ward 2</option>
+                  <option value="Ward 3">Ward 3</option>
+                  <option value="Ward 4">Ward 4</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button type="button" onClick={() => setIsDistributeOpen(false)} style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#f1f5f9", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "#475569", cursor: "pointer" }}>
+                  {t("btnCancel")}
+                </button>
+                <button type="submit" style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#047857", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "white", cursor: "pointer" }}>
+                  {t("btnSubmit")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
