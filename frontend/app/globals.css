@@ -2190,3 +2190,34 @@
   border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
 }
+
+/* ── Gram Panchayat Card Morphing & Scale Animation (Uiverse.io TimTrayler reference) ── */
+
+.glass-card,
+.featured-stat-card,
+.mini-stat-card,
+.weekly-chart-card,
+.complaints-card,
+.ai-pill-card,
+.alerts-card,
+.timeline-card {
+  transition: border-radius cubic-bezier(0.075, 0.82, 0.165, 1) 0.8s,
+              transform cubic-bezier(0.075, 0.82, 0.165, 1) 0.8s,
+              box-shadow cubic-bezier(0.075, 0.82, 0.165, 1) 0.8s,
+              border-color 0.3s ease !important;
+}
+
+.glass-card:hover,
+.featured-stat-card:hover,
+.mini-stat-card:hover,
+.weekly-chart-card:hover,
+.complaints-card:hover,
+.ai-pill-card:hover,
+.alerts-card:hover,
+.timeline-card:hover {
+  border-bottom-right-radius: 40px !important;
+  border-top-left-radius: 40px !important;
+  transform: scale(1.025) !important;
+  box-shadow: 0 12px 32px rgba(6, 78, 59, 0.12) !important;
+  z-index: 5;
+}
