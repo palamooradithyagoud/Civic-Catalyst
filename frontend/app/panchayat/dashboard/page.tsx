@@ -40,6 +40,8 @@ import {
   Cpu,
   TrendingUp,
   Calendar,
+  ArrowRight,
+  ShieldCheck,
 } from "lucide-react";
 
 // ── Demo complaint data ─────────────────────────────────────────────────────
@@ -350,17 +352,17 @@ export default function PanchayatDashboard() {
                   <div className="featured-stat-sub">Ramesh Kumar · Today at 9:15 AM</div>
                 </div>
                 <div className="featured-progress">
-                  <div className="featured-progress-fill" style={{ width: "0%" }} />
+                  <div className="featured-progress-fill" style={{ width: "100%" }} />
                 </div>
               </div>
 
               {/* Mini stats */}
               <div className="mini-stat-row">
                 {[
-                  { num: 4, lbl: "Total", color: "#94a3b8" },
-                  { num: 2, lbl: "Pending", color: "#fbbf24" },
-                  { num: 1, lbl: "Active", color: "#60a5fa" },
-                  { num: 1, lbl: "Resolved", color: "#34d399" },
+                  { num: 4, lbl: "Total", color: "#0f172a" },
+                  { num: 2, lbl: "Pending", color: "#d97706" },
+                  { num: 1, lbl: "Active", color: "#2563eb" },
+                  { num: 1, lbl: "Resolved", color: "#16a34a" },
                 ].map(({ num, lbl, color }) => (
                   <div key={lbl} className="mini-stat-card">
                     <div className="mini-stat-num" style={{ color }}>{num}</div>
@@ -388,11 +390,33 @@ export default function PanchayatDashboard() {
                 </div>
 
                 {/* AI status row */}
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.75rem", padding: "0.625rem 0.75rem", borderRadius: "10px", background: "rgba(27,79,216,0.08)", border: "1px solid rgba(27,79,216,0.15)" }}>
-                  <Zap style={{ width: 12, height: 12, color: "#fbbf24" }} />
-                  <span style={{ fontSize: "0.72rem", color: "#93c5fd", fontWeight: 600 }}>AI classification active</span>
-                  <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "rgba(148,163,184,0.5)" }}>real-time</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.75rem", padding: "0.625rem 0.75rem", borderRadius: "10px", background: "#ecfdf5", border: "1px solid #a7f3d0" }}>
+                  <Zap style={{ width: 13, height: 13, color: "#047857" }} />
+                  <span style={{ fontSize: "0.75rem", color: "#042d20", fontWeight: 700 }}>AI classification active</span>
+                  <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "#059669", fontWeight: 600 }}>real-time</span>
                 </div>
+              </div>
+
+              {/* System status (Moved to Left Col for perfect column height balance) */}
+              <div className="glass-card" style={{ padding: "1.125rem" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+                  <span style={{ fontSize: "0.875rem", fontWeight: 800, color: "#042d20" }}>System Status</span>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a", display: "inline-block", boxShadow: "0 0 8px rgba(22,163,74,0.6)" }} />
+                </div>
+                {[
+                  { label: "AI Classification", ok: true },
+                  { label: "Complaint Routing", ok: true },
+                  { label: "Notifications", ok: true },
+                  { label: "Live Tracking", ok: false, phase: "Phase 2" },
+                ].map(({ label, ok, phase }) => (
+                  <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid #f1f5f9" }}>
+                    <span style={{ fontSize: "0.78rem", color: "#334155", fontWeight: 600 }}>{label}</span>
+                    {ok
+                      ? <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#15803d", background: "#dcfce7", border: "1px solid #86efac", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>Operational</span>
+                      : <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#7c3aed", background: "#f3e8ff", border: "1px solid #ddd6fe", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>{phase}</span>
+                    }
+                  </div>
+                ))}
               </div>
 
             </div>
@@ -447,8 +471,8 @@ export default function PanchayatDashboard() {
                   <div className="ai-pill-sub">Intelligent automation for Panchayat officials</div>
                 </div>
                 {AI_CAPABILITIES.map(({ icon: Icon, label, desc, badge, badgeColor, badgeBg, iconColor, iconBg }) => (
-                  <div key={label} className="feature-item" style={{ padding: "0.875rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <div className="feature-icon-wrap" style={{ background: iconBg, borderColor: "rgba(255,255,255,0.06)" }}>
+                  <div key={label} className="feature-item" style={{ padding: "0.875rem 1.25rem", borderBottom: "1px solid #f1f5f9" }}>
+                    <div className="feature-icon-wrap" style={{ background: iconBg, borderColor: "transparent" }}>
                       <Icon style={{ width: 15, height: 15, color: iconColor }} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -490,7 +514,7 @@ export default function PanchayatDashboard() {
                 ))}
               </div>
 
-              {/* Quick info card */}
+              {/* Resolution Rate info card */}
               <div className="glass-card" style={{ padding: "1.125rem" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
                   <Activity style={{ width: 16, height: 16, color: "#059669" }} />
@@ -514,26 +538,33 @@ export default function PanchayatDashboard() {
                 ))}
               </div>
 
-              {/* System status */}
-              <div className="glass-card" style={{ padding: "1.125rem" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-                  <span style={{ fontSize: "0.875rem", fontWeight: 800, color: "#042d20" }}>System Status</span>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a", display: "inline-block", boxShadow: "0 0 8px rgba(22,163,74,0.6)" }} />
+              {/* Panchayat Support Card */}
+              <div className="glass-card" style={{ padding: "1.125rem", background: "linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)", border: "1px solid #a7f3d0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                  <Shield style={{ width: 16, height: 16, color: "#047857" }} />
+                  <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "#042d20" }}>Panchayat Helpdesk</span>
                 </div>
-                {[
-                  { label: "AI Classification", ok: true },
-                  { label: "Complaint Routing", ok: true },
-                  { label: "Notifications", ok: true },
-                  { label: "Live Tracking", ok: false, phase: "Phase 2" },
-                ].map(({ label, ok, phase }) => (
-                  <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid #f1f5f9" }}>
-                    <span style={{ fontSize: "0.78rem", color: "#334155", fontWeight: 600 }}>{label}</span>
-                    {ok
-                      ? <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#15803d", background: "#dcfce7", border: "1px solid #86efac", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>Operational</span>
-                      : <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#7c3aed", background: "#f3e8ff", border: "1px solid #ddd6fe", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>{phase}</span>
-                    }
-                  </div>
-                ))}
+                <p style={{ fontSize: "0.75rem", color: "#475569", lineHeight: 1.5, marginBottom: "0.75rem" }}>
+                  Need assistance routing urgent complaints or escalating to District Magistrate?
+                </p>
+                <button
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    color: "#047857",
+                    background: "#ffffff",
+                    border: "1px solid #a7f3d0",
+                    borderRadius: "8px",
+                    padding: "0.375rem 0.75rem",
+                    cursor: "pointer"
+                  }}
+                  onClick={() => alert("Helpdesk connects in Phase 2!")}
+                >
+                  Contact Support <ArrowRight style={{ width: 12, height: 12 }} />
+                </button>
               </div>
 
             </div>
