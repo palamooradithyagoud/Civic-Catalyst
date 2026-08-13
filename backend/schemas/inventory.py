@@ -12,7 +12,7 @@ class CategoryBase(BaseModel):
 
 class CategoryResponse(CategoryBase):
     id: int
-    created_at: str
+    created_at: Optional[str] = None
 
 
 class SupplierBase(BaseModel):
@@ -25,7 +25,7 @@ class SupplierBase(BaseModel):
 
 class SupplierResponse(SupplierBase):
     id: int
-    created_at: str
+    created_at: Optional[str] = None
 
 
 # ── Inventory Item Schemas ───────────────────────────────────────────────────
@@ -148,21 +148,21 @@ class AlertResponse(BaseModel):
 
 
 class DashboardKPIs(BaseModel):
-    total_items: int
-    total_stock_units: int
-    low_stock_count: int
-    out_of_stock_count: int
-    expiring_soon_count: int
-    expired_count: int
-    total_distributed_30days: int
-    today_distribution_count: int
-    recent_alerts: List[AlertResponse]
-    top_critical_items: List[ItemResponse]
+    total_items: int = 0
+    total_stock_units: int = 0
+    low_stock_count: int = 0
+    out_of_stock_count: int = 0
+    expiring_soon_count: int = 0
+    expired_count: int = 0
+    total_distributed_30days: int = 0
+    today_distribution_count: int = 0
+    recent_alerts: List[AlertResponse] = []
+    top_critical_items: List[ItemResponse] = []
 
 
 class AnalyticsResponse(BaseModel):
-    category_breakdown: List[Dict[str, Any]]
-    distribution_by_purpose: List[Dict[str, Any]]
-    top_distributed_items: List[Dict[str, Any]]
-    daily_distribution_trend: List[Dict[str, Any]]
-    stock_status_summary: Dict[str, int]
+    category_breakdown: List[Dict[str, Any]] = []
+    distribution_by_purpose: List[Dict[str, Any]] = []
+    top_distributed_items: List[Dict[str, Any]] = []
+    daily_distribution_trend: List[Dict[str, Any]] = []
+    stock_status_summary: Dict[str, int] = {}
