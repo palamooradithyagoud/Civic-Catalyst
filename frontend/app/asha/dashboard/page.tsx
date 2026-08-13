@@ -131,11 +131,11 @@ export default function AshaDashboardPage() {
 
   const NAV_ITEMS = [
     { icon: LayoutDashboard, label: "Dashboard", active: true },
-    { icon: Baby, label: "Maternal & Child", badge: "4 High Risk" },
+    { icon: Baby, label: "Maternal & Child", badge: "4 Risk" },
     { icon: Activity, label: "Health Complaints", badge: "2 Active" },
     { icon: Syringe, label: "Immunization", active: false },
     { icon: MapPin, label: "Ward Health Map", active: false },
-    { icon: ShieldAlert, label: "Epidemic Early Warnings", active: false },
+    { icon: ShieldAlert, label: "Epidemic Alerts", active: false },
   ];
 
   return (
