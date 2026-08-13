@@ -226,12 +226,11 @@ export default function PanchayatDashboard() {
   const displayName = session.name.replace("Demo Gram Panchayat", "").trim() || session.name;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
-      <div className="india-top-bar" />
-      <div className="panchayat-shell" style={{ height: "calc(100vh - 3px)" }}>
+    <div className="panchayat-shell">
 
-        {/* ── SIDEBAR ───────────────────────────────────────── */}
-        <aside className="panchayat-sidebar">
+      {/* ── SIDEBAR ───────────────────────────────────────── */}
+      <aside className="panchayat-sidebar">
+
 
 
         {/* Logo */}
@@ -602,9 +601,9 @@ export default function PanchayatDashboard() {
         </div>
       </div>
     </div>
-  </div>
   );
 }
+
 
 
 

@@ -2184,8 +2184,4 @@
   display: flex; align-items: center; justify-content: center;
 }
 
-/* ── India top bar ───────────────────────────────────────── */
-.india-bar-sidebar {
-  height: 3px;
-  background: linear-gradient(90deg, #FF9933 0%, #FF9933 33.3%, rgba(255,255,255,0.2) 33.3%, rgba(255,255,255,0.2) 66.6%, #138808 66.6%, #138808 100%);
-}
+

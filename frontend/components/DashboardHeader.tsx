@@ -21,11 +21,8 @@ export function DashboardHeader({ title, subtitle, role }: DashboardHeaderProps)
   const isOfficial = role === "panchayat_official";
 
   return (
-    <>
-      {/* India Tricolour stripe */}
-      <div className="india-top-bar" />
+    <header className="gov-header">
 
-      <header className="gov-header">
         <div className="gov-header-inner">
           {/* Brand */}
           <div className="gov-logo">
@@ -68,6 +65,6 @@ export function DashboardHeader({ title, subtitle, role }: DashboardHeaderProps)
           </div>
         </div>
       </header>
-    </>
   );
 }
+
