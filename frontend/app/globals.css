@@ -2286,6 +2286,46 @@
   z-index: 5;
 }
 
+/* ── Card Halo Ring Motion Animation (Uiverse.io Javierrocadev reference) ── */
+
+.glass-card::before,
+.featured-stat-card::before,
+.mini-stat-card::before,
+.weekly-chart-card::before,
+.complaints-card::before,
+.ai-pill-card::before,
+.alerts-card::before,
+.timeline-card::before {
+  content: "";
+  height: 100px;
+  width: 100px;
+  position: absolute;
+  top: -40%;
+  left: -20%;
+  border-radius: 50%;
+  border: 35px solid rgba(6, 78, 59, 0.12);
+  transition: all 0.8s ease;
+  filter: blur(0.5rem);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.glass-card:hover::before,
+.featured-stat-card:hover::before,
+.mini-stat-card:hover::before,
+.weekly-chart-card:hover::before,
+.complaints-card:hover::before,
+.ai-pill-card:hover::before,
+.alerts-card:hover::before,
+.timeline-card:hover::before {
+  width: 140px;
+  height: 140px;
+  top: -30%;
+  left: 50%;
+  filter: blur(0rem);
+  border-color: rgba(16, 185, 129, 0.22);
+}
+
 /* ── Weather Sun & Cloud Animation (Uiverse.io zanina-yassine reference) ── */
 
 .weather-widget-box {
