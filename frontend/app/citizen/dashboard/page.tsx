@@ -92,7 +92,23 @@ export default function CitizenDashboard() {
               <Sparkles style={{ width: 10, height: 10 }} />
               Citizen Portal
             </div>
-            <h1 className="hero-title">Namaste, {session.name} <span style={{ fontSize: "1.5rem" }}>🙏</span></h1>
+            <h1 className="hero-title" style={{ display: "inline-flex", alignItems: "center" }}>
+              Namaste, {session.name}
+              <span className="weather-anim-wrapper" title="Weather Forecast">
+                <span className="weather-anim-container">
+                  <span className="sun sunshine" />
+                  <span className="sun" />
+                  <span className="cloud back">
+                    <span className="left-back" />
+                    <span className="right-back" />
+                  </span>
+                  <span className="cloud front">
+                    <span className="left-front" />
+                    <span className="right-front" />
+                  </span>
+                </span>
+              </span>
+            </h1>
             <div className="hero-subtitle">
               <MapPin style={{ width: 14, height: 14, color: "#64748b" }} />
               {session.village}

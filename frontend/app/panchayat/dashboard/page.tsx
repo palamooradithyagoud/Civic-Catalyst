@@ -316,7 +316,23 @@ export default function PanchayatDashboard() {
           {/* Greeting row */}
           <div className="greeting-row fade-up fade-up-1">
             <div>
-              <h1 className="greeting-title">{getHour()}, {displayName.split(" ")[0]} 👋</h1>
+              <h1 className="greeting-title" style={{ display: "inline-flex", alignItems: "center" }}>
+                {getHour()}, {displayName.split(" ")[0]}
+                <span className="weather-anim-wrapper" title="Weather Forecast">
+                  <span className="weather-anim-container">
+                    <span className="sun sunshine" />
+                    <span className="sun" />
+                    <span className="cloud back">
+                      <span className="left-back" />
+                      <span className="right-back" />
+                    </span>
+                    <span className="cloud front">
+                      <span className="left-front" />
+                      <span className="right-front" />
+                    </span>
+                  </span>
+                </span>
+              </h1>
               <div className="greeting-sub">
                 <MapPin style={{ width: 13, height: 13 }} />
                 {session.village} · Gram Panchayat Dashboard
