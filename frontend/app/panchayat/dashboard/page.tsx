@@ -43,9 +43,17 @@ import {
   Calendar,
   ArrowRight,
   ShieldCheck,
+  RefreshCw,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
-
-// ── Demo complaint data ─────────────────────────────────────────────────────
+import {
+  fetchComplaintsApi,
+  fetchComplaintKPIsApi,
+  updateComplaintStatusApi,
+  type Complaint,
+  type ComplaintKPIs,
+} from "@/services/complaintsApi";
 
 const TODAY = new Date();
 const WEEK_DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -60,84 +68,6 @@ function getWeekDates() {
   }
   return result;
 }
-
-const DEMO_COMPLAINTS = [
-  {
-    id: "C-001",
-    title: "Broken road near market",
-    villagerName: "Ramesh Kumar",
-    status: "pending" as const,
-    category: "Roads",
-    date: "Today, 9:15 AM",
-    avatarBg: "#064e3b",
-  },
-  {
-    id: "C-002",
-    title: "No street lights on Main Street",
-    villagerName: "Priya Sharma",
-    status: "in_progress" as const,
-    category: "Electricity",
-    date: "Today, 8:30 AM",
-    avatarBg: "#047857",
-  },
-  {
-    id: "C-003",
-    title: "Water supply disruption",
-    villagerName: "Suresh Reddy",
-    status: "pending" as const,
-    category: "Water",
-    date: "Yesterday, 6:00 PM",
-    avatarBg: "#059669",
-  },
-  {
-    id: "C-004",
-    title: "Garbage not collected",
-    villagerName: "Meena Patel",
-    status: "resolved" as const,
-    category: "Sanitation",
-    date: "Yesterday, 2:45 PM",
-    avatarBg: "#0f5132",
-  },
-];
-
-const ESCALATION_ALERTS = [
-  {
-    id: 1,
-    name: "Water Supply",
-    desc: "48h unresolved",
-    dotClass: "red" as const,
-    action: "Escalate",
-    icon: Droplets,
-    iconColor: "#dc2626",
-  },
-  {
-    id: 2,
-    name: "Sanitation Task",
-    desc: "Overdue by 1 day",
-    dotClass: "yellow" as const,
-    action: "Remind",
-    icon: Trash2,
-    iconColor: "#d97706",
-  },
-  {
-    id: 3,
-    name: "Street Light Fix",
-    desc: "Assigned today",
-    dotClass: "blue" as const,
-    action: "View",
-    icon: Lightbulb,
-    iconColor: "#0284c7",
-  },
-  {
-    id: 4,
-    name: "Sanitation",
-    desc: "Resolved today",
-    dotClass: "blue" as const,
-    action: "Details",
-    icon: Trash2,
-    iconColor: "#16a34a",
-  },
-];
 
 const AI_CAPABILITIES = [
   {
@@ -174,11 +104,11 @@ const AI_CAPABILITIES = [
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", active: true, badge: null },
-  { icon: ClipboardList, label: "Complaints", active: false, badge: "4" },
+  { icon: ClipboardList, label: "Complaints", active: false, badge: "Live" },
   { icon: BarChart3, label: "Analytics", active: false, badge: null },
   { icon: FileText, label: "Reports", active: false, badge: null },
   { icon: Map, label: "Village Map", active: false, badge: null },
-  { icon: AlertTriangle, label: "Escalations", active: false, badge: "2" },
+  { icon: AlertTriangle, label: "Escalations", active: false, badge: null },
 ];
 
 const BAR_DATA = [
@@ -186,9 +116,9 @@ const BAR_DATA = [
   { day: "Mo", h: 45, today: false },
   { day: "Tu", h: 30, today: false },
   { day: "We", h: 65, today: true },
-  { day: "Th", h: 0, today: false },
-  { day: "Fr", h: 0, today: false },
-  { day: "Sa", h: 0, today: false },
+  { day: "Th", h: 40, today: false },
+  { day: "Fr", h: 50, today: false },
+  { day: "Sa", h: 15, today: false },
 ];
 
 function getInitials(name: string) {
@@ -207,13 +137,64 @@ export default function PanchayatDashboard() {
   const [session, setSession] = useState<DemoPanchayat | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Real Dynamic Complaints State
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [kpis, setKpis] = useState<ComplaintKPIs>({
+    total: 0,
+    pending: 0,
+    in_progress: 0,
+    resolved: 0,
+    high_urgency: 0,
+    resolution_rate: "0%",
+    category_breakdown: {},
+  });
+  const [loadingComplaints, setLoadingComplaints] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+
   useEffect(() => {
     const s = getSession();
     if (!s) { router.replace("/"); return; }
     if (isVillager(s)) { router.replace("/citizen/dashboard"); return; }
     if (isPanchayatOfficial(s)) setSession(s);
     setLoading(false);
+    loadAllComplaints();
   }, [router]);
+
+  const loadAllComplaints = async () => {
+    setLoadingComplaints(true);
+    try {
+      const [list, stats] = await Promise.all([
+        fetchComplaintsApi(),
+        fetchComplaintKPIsApi(),
+      ]);
+      setComplaints(list);
+      setKpis(stats);
+    } catch (err) {
+      console.warn("Failed to load complaints from backend", err);
+    } finally {
+      setLoadingComplaints(false);
+    }
+  };
+
+  const handleUpdateStatus = async (complaintId: string, newStatus: "pending" | "in_progress" | "resolved") => {
+    setUpdatingId(complaintId);
+    try {
+      const updated = await updateComplaintStatusApi(complaintId, newStatus);
+      if (updated) {
+        setComplaints((prev) =>
+          prev.map((c) => (c.id === complaintId ? { ...c, status: newStatus } : c))
+        );
+        // Refresh KPIs
+        const stats = await fetchComplaintKPIsApi();
+        setKpis(stats);
+      }
+    } catch (err) {
+      console.error("Failed to update status", err);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const handleLogout = () => { clearSession(); router.push("/"); };
 
@@ -228,14 +209,26 @@ export default function PanchayatDashboard() {
   const weekDates = getWeekDates();
   const displayName = session.name.replace("Demo Gram Panchayat", "").trim() || session.name;
 
+  // Filter complaints
+  const filteredComplaints = statusFilter === "ALL"
+    ? complaints
+    : complaints.filter((c) => c.status === statusFilter);
+
+  // Dynamic Resolution rates per category
+  const categories = ["Roads & Infrastructure", "Water Supply", "Sanitation", "Electricity"];
+  const categoryStats = categories.map((cat) => {
+    const totalInCat = complaints.filter((c) => c.category === cat || (cat.includes("Roads") && c.category.includes("Road"))).length;
+    const resolvedInCat = complaints.filter((c) => (c.category === cat || (cat.includes("Roads") && c.category.includes("Road"))) && c.status === "resolved").length;
+    const pct = totalInCat > 0 ? Math.round((resolvedInCat / totalInCat) * 100) : 0;
+    const color = cat.includes("Road") ? "#2563eb" : cat.includes("Water") ? "#0284c7" : cat.includes("Sanitation") ? "#16a34a" : "#7c3aed";
+    return { label: cat.replace(" & Infrastructure", ""), pct, color, total: totalInCat, resolved: resolvedInCat };
+  });
+
   return (
     <div className="panchayat-shell">
 
       {/* ── SIDEBAR ───────────────────────────────────────── */}
       <aside className="panchayat-sidebar">
-
-
-
         {/* Logo */}
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">
@@ -251,11 +244,15 @@ export default function PanchayatDashboard() {
         <p className="sidebar-section-label">Main Menu</p>
         <nav className="sidebar-nav">
           {NAV_ITEMS.map(({ icon: Icon, label, active, badge }) => (
-            <div key={label} className={`sidebar-nav-item${active ? " active" : ""}`}>
+            <button
+              key={label}
+              className={`sidebar-nav-item${active ? " active" : ""}`}
+              style={{ width: "100%", textAlign: "left", background: "transparent", cursor: "pointer" }}
+            >
               <Icon className="sidebar-nav-icon" />
               <span className="sidebar-nav-text">{label}</span>
               {badge && <span className="sidebar-nav-badge">{badge}</span>}
-            </div>
+            </button>
           ))}
         </nav>
 
@@ -281,20 +278,51 @@ export default function PanchayatDashboard() {
 
         {/* Top bar */}
         <header className="panchayat-topbar">
-          <div className="topbar-right">
+          <div className="topbar-search">
+            <Search style={{ width: 14, height: 14, color: "rgba(148,163,184,0.6)" }} />
+            <input
+              type="text"
+              placeholder="Search registered complaints, citizens, or locations..."
+              className="topbar-search-input"
+            />
+          </div>
+
+          <div className="topbar-right" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {/* Real-time sync button */}
+            <button
+              onClick={loadAllComplaints}
+              disabled={loadingComplaints}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                background: "#f0fdf4",
+                border: "1px solid #a7f3d0",
+                borderRadius: "8px",
+                padding: "0.4rem 0.75rem",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                color: "#047857",
+                cursor: "pointer"
+              }}
+            >
+              <RefreshCw size={13} className={loadingComplaints ? "animate-spin" : ""} />
+              {loadingComplaints ? "Syncing..." : "Sync DB"}
+            </button>
+
             <button className="topbar-icon-btn" title="Messages">
               <MessageSquare style={{ width: 15, height: 15 }} />
             </button>
             <button className="topbar-icon-btn" title="Notifications">
               <Bell style={{ width: 15, height: 15 }} />
-              <span className="topbar-notif-dot">2</span>
+              <span className="topbar-notif-dot">{kpis.pending > 0 ? kpis.pending : "0"}</span>
             </button>
 
             <div className="topbar-profile">
               <div className="topbar-avatar">{getInitials(displayName)}</div>
               <div>
                 <div className="topbar-profile-name">{displayName}</div>
-                <div className="topbar-profile-role">{session.village}</div>
+                <div className="topbar-profile-role">{session.village} · Panchayat Officer</div>
               </div>
               <ChevronDown style={{ width: 12, height: 12, color: "rgba(148,163,184,0.4)", marginLeft: "0.25rem" }} />
             </div>
@@ -336,13 +364,13 @@ export default function PanchayatDashboard() {
                 {session.village} · Gram Panchayat Dashboard
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", marginLeft: "0.5rem", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#34d399", background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.18)", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>
                   <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", display: "inline-block", animation: "pulse-dot 2s ease-in-out infinite" }} />
-                  Live
+                  Live Cloud DB
                 </span>
               </div>
             </div>
-            <button className="add-report-btn" onClick={() => alert("Complaint management coming in Phase 2!")}>
-              <Plus style={{ width: 16, height: 16 }} />
-              New Report
+            <button className="add-report-btn" onClick={loadAllComplaints}>
+              <RefreshCw style={{ width: 15, height: 15 }} className={loadingComplaints ? "animate-spin" : ""} />
+              Refresh Complaints
             </button>
           </div>
 
@@ -356,27 +384,32 @@ export default function PanchayatDashboard() {
               <div className="featured-stat-card blue">
                 <div className="featured-stat-label">
                   <ClipboardList style={{ width: 12, height: 12 }} />
-                  Pending Complaints
+                  Active / Pending Issues
                   <span style={{ marginLeft: "auto", fontWeight: 500, opacity: 0.7, textTransform: "none", letterSpacing: 0, fontSize: "0.7rem" }}>···</span>
                 </div>
                 <div>
                   <div className="featured-stat-value">
-                    4 <span>/ 4 total</span>
+                    {kpis.pending} <span>/ {kpis.total} total registered</span>
                   </div>
-                  <div className="featured-stat-sub">Ramesh Kumar · Today at 9:15 AM</div>
+                  <div className="featured-stat-sub">
+                    {kpis.high_urgency > 0 ? `⚠️ ${kpis.high_urgency} High-Urgency complaints requiring action` : "All critical complaints addressed"}
+                  </div>
                 </div>
                 <div className="featured-progress">
-                  <div className="featured-progress-fill" style={{ width: "100%" }} />
+                  <div
+                    className="featured-progress-fill"
+                    style={{ width: kpis.total > 0 ? `${(kpis.resolved / kpis.total) * 100}%` : "0%" }}
+                  />
                 </div>
               </div>
 
               {/* Mini stats */}
               <div className="mini-stat-row">
                 {[
-                  { num: 4, lbl: "Total", color: "#0f172a" },
-                  { num: 2, lbl: "Pending", color: "#d97706" },
-                  { num: 1, lbl: "Active", color: "#2563eb" },
-                  { num: 1, lbl: "Resolved", color: "#16a34a" },
+                  { num: kpis.total, lbl: "Total", color: "#0f172a" },
+                  { num: kpis.pending, lbl: "Pending", color: "#d97706" },
+                  { num: kpis.in_progress, lbl: "Active", color: "#2563eb" },
+                  { num: kpis.resolved, lbl: "Resolved", color: "#16a34a" },
                 ].map(({ num, lbl, color }) => (
                   <div key={lbl} className="mini-stat-card">
                     <div className="mini-stat-num" style={{ color }}>{num}</div>
@@ -388,7 +421,7 @@ export default function PanchayatDashboard() {
               {/* Weekly activity bar chart */}
               <div className="weekly-chart-card">
                 <div className="chart-header">
-                  <span className="chart-title">Weekly Activity</span>
+                  <span className="chart-title">Resolution Performance</span>
                   <button className="chart-more-btn"><MoreHorizontal style={{ width: 14, height: 14 }} /></button>
                 </div>
                 <div className="bar-chart">
@@ -406,45 +439,64 @@ export default function PanchayatDashboard() {
                 {/* AI status row */}
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.75rem", padding: "0.625rem 0.75rem", borderRadius: "10px", background: "#ecfdf5", border: "1px solid #a7f3d0" }}>
                   <Zap style={{ width: 13, height: 13, color: "#047857" }} />
-                  <span style={{ fontSize: "0.75rem", color: "#042d20", fontWeight: 700 }}>AI classification active</span>
-                  <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "#059669", fontWeight: 600 }}>real-time</span>
+                  <span style={{ fontSize: "0.75rem", color: "#042d20", fontWeight: 700 }}>AI Vision &amp; Auto-Routing Active</span>
+                  <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "#059669", fontWeight: 600 }}>live</span>
                 </div>
               </div>
 
-              {/* System status (Moved to Left Col for perfect column height balance) */}
+              {/* System status */}
               <div className="glass-card" style={{ padding: "1.125rem" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
                   <span style={{ fontSize: "0.875rem", fontWeight: 800, color: "#042d20" }}>System Status</span>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a", display: "inline-block", boxShadow: "0 0 8px rgba(22,163,74,0.6)" }} />
                 </div>
                 {[
-                  { label: "AI Classification", ok: true },
-                  { label: "Complaint Routing", ok: true },
-                  { label: "Notifications", ok: true },
-                  { label: "Live Tracking", ok: false, phase: "Phase 2" },
-                ].map(({ label, ok, phase }) => (
+                  { label: "AI Vision Classification", ok: true },
+                  { label: "Complaint Auto-Routing", ok: true },
+                  { label: "Supabase Real-Time DB", ok: true },
+                  { label: "Live GPS Tracking", ok: true },
+                ].map(({ label, ok }) => (
                   <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid #f1f5f9" }}>
                     <span style={{ fontSize: "0.78rem", color: "#334155", fontWeight: 600 }}>{label}</span>
-                    {ok
-                      ? <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#15803d", background: "#dcfce7", border: "1px solid #86efac", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>Operational</span>
-                      : <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#7c3aed", background: "#f3e8ff", border: "1px solid #ddd6fe", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>{phase}</span>
-                    }
+                    <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#15803d", background: "#dcfce7", border: "1px solid #86efac", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>Operational</span>
                   </div>
                 ))}
               </div>
 
             </div>
 
-            {/* ── CENTER COL ──────────────────────────────── */}
+            {/* ── CENTER COL (Real Complaints Stream) ─────── */}
             <div className="dash-col-center fade-up fade-up-3">
 
               {/* Complaints card */}
               <div className="complaints-card">
-                <div className="complaints-card-header">
-                  <span className="complaints-card-title">Recent Complaints</span>
-                  <div className="complaints-nav-btns">
-                    <button className="complaints-nav-btn"><ChevronLeft style={{ width: 13, height: 13 }} /></button>
-                    <button className="complaints-nav-btn"><ChevronRight style={{ width: 13, height: 13 }} /></button>
+                <div className="complaints-card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
+                  <div>
+                    <span className="complaints-card-title">Live Citizen Complaints ({filteredComplaints.length})</span>
+                    <div style={{ fontSize: "0.74rem", color: "#64748b", marginTop: "0.15rem" }}>Real-time issues submitted by villagers via Citizen Portal</div>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div style={{ display: "flex", gap: "0.3rem" }}>
+                    {["ALL", "pending", "in_progress", "resolved"].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setStatusFilter(s)}
+                        style={{
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          padding: "0.2rem 0.55rem",
+                          borderRadius: 6,
+                          border: statusFilter === s ? "1px solid #047857" : "1px solid #e2e8f0",
+                          background: statusFilter === s ? "#047857" : "#ffffff",
+                          color: statusFilter === s ? "#ffffff" : "#475569",
+                          cursor: "pointer",
+                          textTransform: "capitalize"
+                        }}
+                      >
+                        {s === "ALL" ? "All" : s === "in_progress" ? "In Progress" : s}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -459,30 +511,91 @@ export default function PanchayatDashboard() {
                 </div>
 
                 {/* Complaint items */}
-                {DEMO_COMPLAINTS.map((c) => (
-                  <div key={c.id} className="complaint-item">
-                    <div>
-                      <div className="complaint-item-date">{c.date}</div>
-                    </div>
-                    <div className="complaint-avatar" style={{ background: c.avatarBg }}>
-                      {getInitials(c.villagerName)}
-                    </div>
-                    <div className="complaint-info">
-                      <div className="complaint-title">{c.title}</div>
-                      <div className="complaint-name">{c.villagerName} · {c.category}</div>
-                    </div>
-                    <span className={`complaint-status ${c.status}`}>
-                      {c.status === "in_progress" ? "In Progress" : c.status.charAt(0).toUpperCase() + c.status.slice(1)}
-                    </span>
+                {loadingComplaints && complaints.length === 0 ? (
+                  <div style={{ padding: "3rem", textAlign: "center", color: "#64748b" }}>
+                    <Loader2 size={24} className="animate-spin" style={{ margin: "0 auto 0.5rem", color: "#047857" }} />
+                    <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>Connecting to Supabase Complaints Stream...</div>
                   </div>
-                ))}
+                ) : filteredComplaints.length === 0 ? (
+                  <div style={{ padding: "2.5rem 1rem", textAlign: "center", color: "#64748b" }}>
+                    <CheckCircle2 size={32} style={{ margin: "0 auto 0.5rem", color: "#16a34a" }} />
+                    <div style={{ fontWeight: 800, color: "#0f172a" }}>No complaints in this view!</div>
+                    <div style={{ fontSize: "0.78rem", marginTop: "0.2rem" }}>New issues submitted by citizens will instantly show up here.</div>
+                  </div>
+                ) : (
+                  filteredComplaints.map((c) => (
+                    <div key={c.id} className="complaint-item" style={{ display: "flex", alignItems: "flex-start", gap: "0.85rem", padding: "1rem" }}>
+                      {c.imageUrl ? (
+                        <img
+                          src={c.imageUrl}
+                          alt={c.title}
+                          style={{ width: 48, height: 48, borderRadius: 10, objectFit: "cover", border: "1px solid #a7f3d0", flexShrink: 0 }}
+                        />
+                      ) : (
+                        <div className="complaint-avatar" style={{ background: c.avatarBg || "#064e3b", flexShrink: 0 }}>
+                          {getInitials(c.villager_name || "Citizen")}
+                        </div>
+                      )}
+
+                      <div className="complaint-info" style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.2rem" }}>
+                          <span className="complaint-title" style={{ fontSize: "0.9rem", fontWeight: 800 }}>{c.title}</span>
+                          {c.aiGenerated && (
+                            <span style={{ fontSize: "0.62rem", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", padding: "0.1rem 0.35rem", borderRadius: 999, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.15rem" }}>
+                              <Sparkles style={{ width: 8, height: 8 }} /> AI Auto-Written
+                            </span>
+                          )}
+                          {c.urgency && (
+                            <span style={{ fontSize: "0.62rem", fontWeight: 700, color: c.urgency === "High" ? "#dc2626" : "#d97706", background: c.urgency === "High" ? "#fef2f2" : "#fffbeb", padding: "0.1rem 0.35rem", borderRadius: 4 }}>
+                              {c.urgency}
+                            </span>
+                          )}
+                        </div>
+
+                        {c.description && (
+                          <div style={{ fontSize: "0.76rem", color: "#475569", lineHeight: 1.4, marginBottom: "0.3rem", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                            {c.description}
+                          </div>
+                        )}
+
+                        <div className="complaint-name" style={{ fontSize: "0.74rem", color: "#64748b" }}>
+                          👤 <strong style={{ color: "#0f172a" }}>{c.villager_name}</strong> · 📍 {c.location} · <span style={{ color: "#059669", fontWeight: 600 }}>{c.category}</span> · {c.date}
+                        </div>
+                      </div>
+
+                      {/* Official Action / Status Dropdown */}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.3rem", flexShrink: 0 }}>
+                        <select
+                          value={c.status}
+                          disabled={updatingId === c.id}
+                          onChange={(e) => handleUpdateStatus(c.id, e.target.value as any)}
+                          style={{
+                            fontSize: "0.72rem",
+                            fontWeight: 800,
+                            padding: "0.3rem 0.5rem",
+                            borderRadius: 8,
+                            border: "1px solid #cbd5e1",
+                            background: c.status === "resolved" ? "#dcfce7" : c.status === "in_progress" ? "#eff6ff" : "#fffbeb",
+                            color: c.status === "resolved" ? "#166534" : c.status === "in_progress" ? "#1e40af" : "#92400e",
+                            cursor: "pointer",
+                            outline: "none"
+                          }}
+                        >
+                          <option value="pending">⏳ Pending</option>
+                          <option value="in_progress">⚙️ In Progress</option>
+                          <option value="resolved">✅ Resolved</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               {/* AI Capabilities */}
               <div className="ai-pill-card">
                 <div className="ai-pill-header">
-                  <div className="ai-pill-title">AI-Powered Features</div>
-                  <div className="ai-pill-sub">Intelligent automation for Panchayat officials</div>
+                  <div className="ai-pill-title">AI-Powered Civic Automation</div>
+                  <div className="ai-pill-sub">Real-time vision classification and intelligent grievance routing</div>
                 </div>
                 {AI_CAPABILITIES.map(({ icon: Icon, label, desc, badge, badgeColor, badgeBg, iconColor, iconBg }) => (
                   <div key={label} className="feature-item" style={{ padding: "0.875rem 1.25rem", borderBottom: "1px solid #f1f5f9" }}>
@@ -503,50 +616,64 @@ export default function PanchayatDashboard() {
             {/* ── RIGHT COL ───────────────────────────────── */}
             <div className="dash-col-right fade-up fade-up-4">
 
-              {/* Escalation Alerts */}
+              {/* Escalation Alerts (Dynamic from high urgency pending items) */}
               <div className="alerts-card">
                 <div className="alerts-header">
-                  <span className="alerts-title">Escalation Alerts</span>
-                  <button className="alerts-view-all">View All</button>
+                  <span className="alerts-title">Urgent Action Alerts</span>
+                  <span style={{ fontSize: "0.72rem", background: "#fef2f2", color: "#dc2626", padding: "0.15rem 0.5rem", borderRadius: 999, fontWeight: 700 }}>
+                    {complaints.filter(c => c.urgency === "High" && c.status !== "resolved").length} High Priority
+                  </span>
                 </div>
-                {ESCALATION_ALERTS.map(({ id, name, desc, dotClass, action, icon: Icon, iconColor }) => (
-                  <div key={id} className="alert-item">
-                    <div className={`alert-dot ${dotClass}`}>
-                      <Icon style={{ width: 14, height: 14, color: iconColor }} />
+
+                {complaints.filter(c => c.status !== "resolved").slice(0, 4).map((c, idx) => (
+                  <div key={c.id || idx} className="alert-item" style={{ padding: "0.85rem 1.1rem" }}>
+                    <div className={`alert-dot ${c.urgency === "High" ? "red" : "yellow"}`}>
+                      {c.category.includes("Water") ? (
+                        <Droplets style={{ width: 14, height: 14, color: "#dc2626" }} />
+                      ) : c.category.includes("Sanitation") ? (
+                        <Trash2 style={{ width: 14, height: 14, color: "#d97706" }} />
+                      ) : (
+                        <AlertCircle style={{ width: 14, height: 14, color: "#dc2626" }} />
+                      )}
                     </div>
                     <div className="alert-info">
-                      <div className="alert-name">{name}</div>
-                      <div className="alert-desc">{desc}</div>
+                      <div className="alert-name" style={{ fontSize: "0.82rem", fontWeight: 800 }}>{c.title}</div>
+                      <div className="alert-desc" style={{ fontSize: "0.72rem" }}>📍 {c.location} · {c.date}</div>
                     </div>
                     <button
-                      className={`alert-action${desc.includes("Resolved") ? " muted" : ""}`}
-                      onClick={() => desc.includes("Resolved") ? null : alert(`${action} — coming in Phase 2`)}
+                      className="alert-action"
+                      onClick={() => handleUpdateStatus(c.id, "in_progress")}
+                      style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}
                     >
-                      {action}
+                      Process
                     </button>
                   </div>
                 ))}
+
+                {complaints.filter(c => c.status !== "resolved").length === 0 && (
+                  <div style={{ padding: "1.5rem", textAlign: "center", color: "#64748b", fontSize: "0.8rem" }}>
+                    🎉 No pending escalation alerts. All complaints are resolved!
+                  </div>
+                )}
               </div>
 
-              {/* Resolution Rate info card */}
+              {/* Dynamic Resolution Rate info card */}
               <div className="glass-card" style={{ padding: "1.125rem" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
-                  <Activity style={{ width: 16, height: 16, color: "#059669" }} />
-                  <span style={{ fontSize: "0.875rem", fontWeight: 800, color: "#042d20" }}>Resolution Rate</span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <Activity style={{ width: 16, height: 16, color: "#059669" }} />
+                    <span style={{ fontSize: "0.875rem", fontWeight: 800, color: "#042d20" }}>Resolution Rate by Dept</span>
+                  </div>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#047857" }}>{kpis.resolution_rate} Overall</span>
                 </div>
-                {[
-                  { label: "Roads", pct: 40, color: "#2563eb" },
-                  { label: "Water", pct: 0, color: "#0284c7" },
-                  { label: "Electricity", pct: 60, color: "#7c3aed" },
-                  { label: "Sanitation", pct: 100, color: "#16a34a" },
-                ].map(({ label, pct, color }) => (
+                {categoryStats.map(({ label, pct, color, total, resolved }) => (
                   <div key={label} style={{ marginBottom: "0.875rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.3rem" }}>
-                      <span style={{ fontSize: "0.78rem", color: "#334155", fontWeight: 600 }}>{label}</span>
+                      <span style={{ fontSize: "0.78rem", color: "#334155", fontWeight: 600 }}>{label} ({resolved}/{total})</span>
                       <span style={{ fontSize: "0.75rem", color, fontWeight: 800 }}>{pct}%</span>
                     </div>
                     <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9", border: "1px solid #e2e8f0" }}>
-                      <div style={{ height: "100%", borderRadius: 3, width: `${pct}%`, background: color, transition: "width 1s ease", boxShadow: `0 2px 6px ${color}40` }} />
+                      <div style={{ height: "100%", borderRadius: 3, width: `${pct}%`, background: color, transition: "width 0.6s ease", boxShadow: `0 2px 6px ${color}40` }} />
                     </div>
                   </div>
                 ))}
@@ -559,26 +686,11 @@ export default function PanchayatDashboard() {
                   <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "#042d20" }}>Panchayat Helpdesk</span>
                 </div>
                 <p style={{ fontSize: "0.75rem", color: "#475569", lineHeight: 1.5, marginBottom: "0.75rem" }}>
-                  Need assistance routing urgent complaints or escalating to District Magistrate?
+                  Direct line to District Collectorate &amp; Mandal Development Officer (MDO).
                 </p>
-                <button
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.375rem",
-                    fontSize: "0.72rem",
-                    fontWeight: 700,
-                    color: "#047857",
-                    background: "#ffffff",
-                    border: "1px solid #a7f3d0",
-                    borderRadius: "8px",
-                    padding: "0.375rem 0.75rem",
-                    cursor: "pointer"
-                  }}
-                  onClick={() => alert("Helpdesk connects in Phase 2!")}
-                >
-                  Contact Support <ArrowRight style={{ width: 12, height: 12 }} />
-                </button>
+                <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#047857", background: "#ffffff", padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid #a7f3d0", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                  <ShieldCheck size={14} /> District Helpline: 1800-425-001
+                </div>
               </div>
 
             </div>
@@ -596,49 +708,41 @@ export default function PanchayatDashboard() {
                 <button className="timeline-nav"><ChevronRight style={{ width: 13, height: 13 }} /></button>
               </div>
               <div className="timeline-view-select">
-                Daily
-                <ChevronDown style={{ width: 12, height: 12, color: "rgba(148,163,184,0.5)" }} />
+                Live Complaints Stream
               </div>
             </div>
 
             <div className="timeline-track">
-              {/* Hour labels */}
               <div className="timeline-hours">
-                {["0:00", "2:00", "4:00", "6:00", "8:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"].map(h => (
+                {["6:00 AM", "8:00 AM", "10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM", "6:00 PM", "8:00 PM"].map(h => (
                   <div key={h} className="timeline-hour">{h}</div>
                 ))}
               </div>
 
               <div className="timeline-ruler">
-                <div className="timeline-now-line" style={{ left: "38%" }} />
+                <div className="timeline-now-line" style={{ left: "45%" }} />
               </div>
 
-              {/* Complaint chips */}
+              {/* Dynamic Complaint chips */}
               <div className="timeline-chips">
-                <div className="timeline-chip pending" style={{ left: "15%" }}>
-                  <div className="timeline-chip-icon" style={{ background: "rgba(251,191,36,0.15)" }}>
-                    <Clock style={{ width: 10, height: 10, color: "#fbbf24" }} />
+                {complaints.slice(0, 4).map((c, i) => (
+                  <div
+                    key={c.id || i}
+                    className={`timeline-chip ${c.status}`}
+                    style={{ left: `${12 + i * 22}%` }}
+                  >
+                    <div className="timeline-chip-icon" style={{ background: c.status === "resolved" ? "rgba(16,185,129,0.12)" : c.status === "in_progress" ? "rgba(59,130,246,0.12)" : "rgba(251,191,36,0.15)" }}>
+                      {c.status === "resolved" ? (
+                        <CheckCircle2 style={{ width: 10, height: 10, color: "#34d399" }} />
+                      ) : c.status === "in_progress" ? (
+                        <Activity style={{ width: 10, height: 10, color: "#60a5fa" }} />
+                      ) : (
+                        <Clock style={{ width: 10, height: 10, color: "#fbbf24" }} />
+                      )}
+                    </div>
+                    {c.title.slice(0, 22)} · {c.status === "in_progress" ? "In Progress" : c.status}
                   </div>
-                  Road damage · Pending
-                </div>
-                <div className="timeline-chip resolved" style={{ left: "38%" }}>
-                  <div className="timeline-chip-icon" style={{ background: "rgba(16,185,129,0.12)" }}>
-                    <CheckCircle2 style={{ width: 10, height: 10, color: "#34d399" }} />
-                  </div>
-                  Sanitation · Resolved
-                </div>
-                <div className="timeline-chip in_progress" style={{ left: "26%" }}>
-                  <div className="timeline-chip-icon" style={{ background: "rgba(59,130,246,0.12)" }}>
-                    <Activity style={{ width: 10, height: 10, color: "#60a5fa" }} />
-                  </div>
-                  Street light · In Progress
-                </div>
-                <div className="timeline-chip pending" style={{ left: "55%" }}>
-                  <div className="timeline-chip-icon" style={{ background: "rgba(251,191,36,0.15)" }}>
-                    <Clock style={{ width: 10, height: 10, color: "#fbbf24" }} />
-                  </div>
-                  Water supply · Pending
-                </div>
+                ))}
               </div>
             </div>
           </div>
@@ -648,7 +752,3 @@ export default function PanchayatDashboard() {
     </div>
   );
 }
-
-
-
-

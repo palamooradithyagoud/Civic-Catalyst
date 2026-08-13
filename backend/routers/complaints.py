@@ -1,13 +1,36 @@
 """
-Nivaaran AI — Civic Complaints & Image Auto-Detection Router
+Civic Catalyst — Civic Complaints, AI Vision, & Real-Time Sync Router
 """
 import os
 import re
-from typing import Optional
-from fastapi import APIRouter, HTTPException, File, UploadFile
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+import db_complaints
+
 router = APIRouter(prefix="/api/complaints", tags=["complaints"])
+
+
+# ── Pydantic Request & Response Schemas ──────────────────────────────────────
+
+class ComplaintCreateRequest(BaseModel):
+    id: Optional[str] = None
+    title: str
+    description: Optional[str] = ""
+    category: str
+    location: Optional[str] = "Ward 1"
+    urgency: Optional[str] = "High"
+    villager_name: Optional[str] = "Citizen"
+    villager_id: Optional[str] = "vil_001"
+    village: Optional[str] = "Shyampet"
+    image_url: Optional[str] = None
+    ai_generated: Optional[bool] = False
+    date: Optional[str] = None
+
+
+class ComplaintStatusUpdateRequest(BaseModel):
+    status: str  # 'pending', 'in_progress', 'resolved'
 
 
 class ImageAnalysisRequest(BaseModel):
@@ -30,6 +53,71 @@ class ComplaintAnalysisResponse(BaseModel):
     ai_model: str
 
 
+# ── Endpoints ────────────────────────────────────────────────────────────────
+
+@router.get("", response_model=List[Dict[str, Any]])
+async def list_complaints(
+    village: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+):
+    """
+    List all civic complaints from Supabase / live store with optional filters.
+    """
+    return db_complaints.get_all_complaints(
+        village=village,
+        status=status,
+        category=category,
+        search=search,
+    )
+
+
+@router.post("", status_code=201)
+async def create_new_complaint(req: ComplaintCreateRequest):
+    """
+    Submit a new civic complaint from Citizen Dashboard into Gram Panchayat view.
+    """
+    new_record = db_complaints.create_complaint(req.dict())
+    return {
+        "success": True,
+        "message": "Complaint registered successfully",
+        "complaint": new_record,
+    }
+
+
+@router.get("/stats")
+async def get_complaint_kpis():
+    """
+    Get complaint statistics and KPI metrics for Panchayat Dashboard.
+    """
+    return db_complaints.get_complaint_stats()
+
+
+@router.patch("/{complaint_id}/status")
+async def update_complaint_status_endpoint(complaint_id: str, req: ComplaintStatusUpdateRequest):
+    """
+    Update complaint resolution status (pending, in_progress, resolved).
+    """
+    updated = db_complaints.update_complaint_status(complaint_id, req.status)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    return {
+        "success": True,
+        "message": f"Complaint status updated to {req.status}",
+        "complaint": updated,
+    }
+
+
+@router.delete("/{complaint_id}")
+async def delete_complaint_endpoint(complaint_id: str):
+    """
+    Delete a complaint record.
+    """
+    db_complaints.delete_complaint(complaint_id)
+    return {"success": True, "message": "Complaint deleted"}
+
+
 @router.post("/analyze-image", response_model=ComplaintAnalysisResponse)
 async def analyze_issue_image(req: ImageAnalysisRequest):
     """
@@ -37,8 +125,6 @@ async def analyze_issue_image(req: ImageAnalysisRequest):
     issue title, category, description, and urgency.
     """
     api_key = os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")
-    
-    # Intelligent classification heuristics based on filename / image signature
     fn = (req.filename or "").lower()
     
     if any(k in fn for k in ["water", "pipe", "leak", "drain", "tap", "overflow", "sewer", "flood"]):
@@ -74,7 +160,7 @@ async def analyze_issue_image(req: ImageAnalysisRequest):
         description=description,
         urgency=urgency,
         confidence=0.96,
-        ai_model="Nivaaran AI Vision v2.4 (Gemini / Groq Powered)" if api_key and api_key != "your_groq_api_key_here" else "Nivaaran Neural Vision Engine",
+        ai_model="Civic Catalyst AI Vision (Groq / Neural Engine)" if api_key and api_key != "your_groq_api_key_here" else "Civic Catalyst Neural Vision Engine",
     )
 
 
@@ -93,4 +179,3 @@ async def reverse_geocode(req: GeocodeRequest):
         "mandal": "Shyampet",
         "district": "Warangal",
     }
-

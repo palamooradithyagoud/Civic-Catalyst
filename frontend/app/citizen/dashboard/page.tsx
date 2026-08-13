@@ -51,51 +51,60 @@ import {
   ShieldCheck,
   Globe,
 } from "lucide-react";
-import { analyzeIssueImage, reverseGeocodeLocation } from "@/services/complaintsApi";
+import {
+  analyzeIssueImage,
+  reverseGeocodeLocation,
+  createComplaintApi,
+  fetchComplaintsApi,
+  type Complaint,
+} from "@/services/complaintsApi";
 import { fetchLiveGpsWeather, type WeatherData } from "@/services/weatherApi";
 import { translations, type Language } from "@/lib/translations";
 
 // ── Demo Data ────────────────────────────────────────────────────────────────
 
-const INITIAL_COMPLAINTS = [
+const INITIAL_COMPLAINTS: Complaint[] = [
   {
     id: "C-001",
     title: "Broken road near main market",
     description: "Deep pothole and asphalt damage obstructing traffic near central market entrance.",
-    status: "pending" as const,
+    status: "pending",
     category: "Roads & Infrastructure",
     date: "Today, 9:15 AM",
     location: "Market Road, Ward 4",
     avatarBg: "#064e3b",
     urgency: "High",
+    villager_name: "Ramesh Kumar",
     aiGenerated: true,
-    imageUrl: undefined as string | undefined,
+    imageUrl: undefined,
   },
   {
     id: "C-002",
     title: "Water supply disruption in Ward 2",
     description: "Burst main pipeline causing clean water leak and low pressure across Ward 2 residential houses.",
-    status: "in_progress" as const,
+    status: "in_progress",
     category: "Water Supply",
     date: "Yesterday, 6:00 PM",
     location: "Ward 2 Residential Area",
     avatarBg: "#059669",
     urgency: "High",
+    villager_name: "Suresh Reddy",
     aiGenerated: true,
-    imageUrl: undefined as string | undefined,
+    imageUrl: undefined,
   },
   {
     id: "C-003",
     title: "Garbage clearance near primary school",
     description: "Unsegregated garbage accumulation creating unhygienic conditions near school entrance.",
-    status: "resolved" as const,
+    status: "resolved",
     category: "Sanitation",
     date: "12 Aug, 2:45 PM",
     location: "Primary School Lane",
     avatarBg: "#0f5132",
     urgency: "Medium",
+    villager_name: "Meena Patel",
     aiGenerated: false,
-    imageUrl: undefined as string | undefined,
+    imageUrl: undefined,
   },
 ];
 
@@ -151,7 +160,8 @@ export default function CitizenDashboard() {
   const [session, setSession] = useState<DemoVillager | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState("home");
-  const [complaints, setComplaints] = useState(INITIAL_COMPLAINTS);
+  const [complaints, setComplaints] = useState<Complaint[]>(INITIAL_COMPLAINTS);
+  const [submittingComplaint, setSubmittingComplaint] = useState(false);
 
   // New Complaint Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -273,7 +283,19 @@ export default function CitizenDashboard() {
     }
 
     loadWeatherForUser();
+    loadLiveComplaints();
   }, [router]);
+
+  const loadLiveComplaints = async () => {
+    try {
+      const data = await fetchComplaintsApi();
+      if (data && data.length > 0) {
+        setComplaints(data);
+      }
+    } catch (err) {
+      console.warn("Could not load live complaints:", err);
+    }
+  };
 
   const handleLogout = () => {
     clearSession();
@@ -367,25 +389,32 @@ export default function CitizenDashboard() {
     setDetectingLocation(false);
   };
 
-  const handleCreateComplaint = (e: React.FormEvent) => {
+  const handleCreateComplaint = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
-    const created = {
-      id: `C-00${complaints.length + 1}`,
-      title: newTitle,
-      description: newDescription || "Civic issue reported with photo and GPS location details.",
-      status: "pending" as const,
-      category: newCategory,
-      date: "Just now",
-      location: newLocation || `${session?.village || "Village"} Ward 1`,
-      avatarBg: "#064e3b",
-      imageUrl: imagePreview || undefined,
-      urgency: urgencyLevel,
-      aiGenerated: aiAutofilled,
-    };
-    setComplaints([created, ...complaints]);
-    resetFormState();
-    setModalOpen(false);
+    if (!newTitle.trim() || submittingComplaint) return;
+    setSubmittingComplaint(true);
+    try {
+      const created = await createComplaintApi({
+        title: newTitle,
+        description: newDescription || "Civic issue reported with photo and GPS location details.",
+        category: newCategory,
+        location: newLocation || `${session?.village || "Village"} Ward 1`,
+        urgency: urgencyLevel,
+        villager_name: session?.name || "Citizen",
+        villager_id: session?.id || "vil_001",
+        village: session?.village || "Shyampet",
+        imageUrl: imagePreview || undefined,
+        aiGenerated: aiAutofilled,
+      });
+
+      setComplaints((prev) => [created, ...prev.filter((x) => x.id !== created.id)]);
+      resetFormState();
+      setModalOpen(false);
+    } catch (err) {
+      console.error("Failed to create complaint", err);
+    } finally {
+      setSubmittingComplaint(false);
+    }
   };
 
   if (loading || !session) {

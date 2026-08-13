@@ -155,3 +155,34 @@ INSERT INTO public.inventory_items
 (4, 'ASH-INV-004', 'ORS & Zinc Hydration Kits', 3, 'Child Health Supplies', 'Kits', 0, 20, 150, 'BAT-ORS-2026', '2027-02-09', 2, 'PHC Central Depot', 'Out of Stock'),
 (5, 'ASH-INV-005', 'OPV Polio Vaccine Vials', 3, 'Child Health Supplies', 'Vials', 4, 15, 80, 'BAT-OPV-44', '2026-11-11', 2, 'PHC Central Depot', 'Low Stock')
 ON CONFLICT (id) DO NOTHING;
+
+-- ── 9. Civic Complaints Table ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.complaints (
+    id SERIAL PRIMARY KEY,
+    complaint_id_code VARCHAR(100) UNIQUE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(100) NOT NULL DEFAULT 'Roads & Infrastructure',
+    location VARCHAR(255) NOT NULL,
+    urgency VARCHAR(50) NOT NULL DEFAULT 'High',
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    villager_name VARCHAR(255) NOT NULL,
+    villager_id VARCHAR(100),
+    village VARCHAR(255) DEFAULT 'Shyampet',
+    image_url TEXT,
+    ai_generated BOOLEAN DEFAULT FALSE,
+    date_label VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE public.complaints ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public access to complaints" ON public.complaints;
+CREATE POLICY "Allow public access to complaints" ON public.complaints FOR ALL USING (true) WITH CHECK (true);
+
+INSERT INTO public.complaints
+(complaint_id_code, title, description, category, location, urgency, status, villager_name, villager_id, village, ai_generated, date_label) VALUES
+('C-001', 'Broken road near main market', 'Deep pothole and asphalt damage obstructing traffic near central market entrance.', 'Roads & Infrastructure', 'Market Road, Ward 4', 'High', 'pending', 'Ramesh Kumar', 'vil_001', 'Shyampet', true, 'Today, 9:15 AM'),
+('C-002', 'Water supply disruption in Ward 2', 'Burst main pipeline causing clean water leak and low pressure across residential houses.', 'Water Supply', 'Ward 2 Residential Area', 'High', 'in_progress', 'Suresh Reddy', 'vil_002', 'Shyampet', true, 'Yesterday, 6:00 PM'),
+('C-003', 'Garbage clearance near primary school', 'Unsegregated garbage accumulation creating unhygienic conditions near school entrance.', 'Sanitation', 'Primary School Lane', 'Medium', 'resolved', 'Meena Patel', 'vil_003', 'Shyampet', false, '12 Aug, 2:45 PM')
+ON CONFLICT (complaint_id_code) DO NOTHING;
