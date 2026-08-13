@@ -34,10 +34,10 @@ import {
   Loader2,
   CheckCircle2,
   RefreshCw,
-  AlertTriangle,
   Trash2,
   Image as ImageIcon,
-  Zap,
+  Search,
+  Filter,
 } from "lucide-react";
 import { analyzeIssueImage, reverseGeocodeLocation } from "@/services/complaintsApi";
 
@@ -85,51 +85,13 @@ const INITIAL_COMPLAINTS = [
   },
 ];
 
-const NAV_ITEMS = [
-  { id: "home", label: "Dashboard", icon: LayoutDashboard, badge: null },
-  { id: "complaints", label: "Complaints", icon: ClipboardList, badge: "3" },
-  { id: "weather", label: "Weather", icon: CloudSun, badge: "32°" },
-  { id: "market", label: "Market Prices", icon: TrendingUp, badge: "Live" },
-  { id: "news", label: "Local News", icon: FileText, badge: "New" },
-];
-
-const FEATURE_BOXES = [
-  {
-    id: "complaints",
-    title: "Civic Complaints",
-    desc: "Report problems in your village and track their resolution progress.",
-    icon: AlertCircle,
-    iconBg: "#fef2f2",
-    iconColor: "#ef4444",
-  },
-  {
-    id: "weather",
-    title: "Weather Report",
-    desc: "Check current weather, 7-day outlooks and farming advisories.",
-    icon: CloudSun,
-    iconBg: "#eff6ff",
-    iconColor: "#3b82f6",
-  },
-  {
-    id: "market",
-    title: "Market Prices",
-    desc: "View current crop rates across regional mandis for farmers.",
-    icon: TrendingUp,
-    iconBg: "#ecfdf5",
-    iconColor: "#059669",
-  },
-  {
-    id: "news",
-    title: "Local News",
-    desc: "Stay informed with official Gram Sabha notices and local alerts.",
-    icon: FileText,
-    iconBg: "#f5f3ff",
-    iconColor: "#8b5cf6",
-  },
-];
-
 function getInitials(name: string) {
-  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 }
 
 export default function CitizenDashboard() {
@@ -138,6 +100,9 @@ export default function CitizenDashboard() {
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState("home");
   const [complaints, setComplaints] = useState(INITIAL_COMPLAINTS);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // New Complaint Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -234,7 +199,7 @@ export default function CitizenDashboard() {
             setDetectingLocation(false);
           }
         },
-        (error) => {
+        () => {
           const fallbackLoc = `Ward 4, ${session?.village || "Shyampet"} Main Road (GPS Verified)`;
           setNewLocation(fallbackLoc);
           setLocationDetected(true);
@@ -267,8 +232,9 @@ export default function CitizenDashboard() {
   const handleCreateComplaint = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
+    const newId = `C-00${complaints.length + 1}`;
     const created = {
-      id: `C-00${complaints.length + 1}`,
+      id: newId,
       title: newTitle,
       description: newDescription || "Civic issue reported with photo and GPS location details.",
       status: "pending" as const,
@@ -283,6 +249,8 @@ export default function CitizenDashboard() {
     setComplaints([created, ...complaints]);
     resetFormState();
     setModalOpen(false);
+    setSuccessToast(`Issue ${newId} posted successfully! Stored in the Complaints section.`);
+    setTimeout(() => setSuccessToast(null), 6000);
   };
 
   if (loading || !session) {
@@ -295,10 +263,33 @@ export default function CitizenDashboard() {
 
   const displayName = session.name;
 
+  const filteredComplaints = complaints.filter((c) => {
+    const matchesSearch =
+      c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.id.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "all" ? true : c.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const NAV_ITEMS = [
+    { id: "home", label: "Dashboard", icon: LayoutDashboard, badge: null },
+    {
+      id: "complaints",
+      label: "Stored Complaints",
+      icon: ClipboardList,
+      badge: `${complaints.length}`,
+    },
+    { id: "weather", label: "Weather", icon: CloudSun, badge: "32°" },
+    { id: "market", label: "Market Prices", icon: TrendingUp, badge: "Live" },
+    { id: "news", label: "Local News", icon: FileText, badge: "New" },
+  ];
+
   return (
     <div className="panchayat-shell">
 
-      {/* ── SIDEBAR ───────────────────────────────────────── */}
+      {/* ── SIDEBAR (Contains Stored Complaints Button) ────────────────── */}
       <aside className="panchayat-sidebar">
         {/* Logo */}
         <div className="sidebar-logo">
@@ -322,10 +313,22 @@ export default function CitizenDashboard() {
                 onClick={() => setCurrentTab(id)}
                 className={`sidebar-nav-item${isActive ? " active" : ""}`}
                 style={{ width: "100%", textAlign: "left", background: "transparent", cursor: "pointer" }}
+                title={id === "complaints" ? "View all stored civic complaints" : label}
               >
                 <Icon className="sidebar-nav-icon" />
                 <span className="sidebar-nav-text">{label}</span>
-                {badge && <span className="sidebar-nav-badge">{badge}</span>}
+                {badge && (
+                  <span
+                    className="sidebar-nav-badge"
+                    style={
+                      id === "complaints"
+                        ? { background: "#059669", color: "#ffffff", fontWeight: 800 }
+                        : undefined
+                    }
+                  >
+                    {badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -359,7 +362,7 @@ export default function CitizenDashboard() {
             </button>
             <button className="topbar-icon-btn" title="Notifications">
               <Bell style={{ width: 15, height: 15 }} />
-              <span className="topbar-notif-dot">2</span>
+              <span className="topbar-notif-dot">{complaints.filter(c => c.status === 'pending').length}</span>
             </button>
 
             <div className="topbar-profile">
@@ -373,6 +376,53 @@ export default function CitizenDashboard() {
           </div>
         </header>
 
+        {/* Success Toast Notification */}
+        {successToast && (
+          <div
+            style={{
+              position: "fixed",
+              top: 20,
+              right: 24,
+              zIndex: 999,
+              background: "#064e3b",
+              color: "#ffffff",
+              borderRadius: 12,
+              padding: "0.85rem 1.25rem",
+              boxShadow: "0 10px 25px -5px rgba(0,0,0,0.3)",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.75rem",
+              fontSize: "0.85rem",
+              border: "1px solid #059669",
+            }}
+          >
+            <CheckCircle2 style={{ width: 18, height: 18, color: "#34d399" }} />
+            <span>{successToast}</span>
+            <button
+              onClick={() => { setCurrentTab("complaints"); setSuccessToast(null); }}
+              style={{
+                background: "#059669",
+                border: "none",
+                color: "#ffffff",
+                borderRadius: 6,
+                padding: "0.25rem 0.6rem",
+                fontWeight: 700,
+                fontSize: "0.75rem",
+                cursor: "pointer",
+                marginLeft: "0.5rem",
+              }}
+            >
+              View Stored Complaints →
+            </button>
+            <button
+              onClick={() => setSuccessToast(null)}
+              style={{ background: "transparent", border: "none", color: "#a7f3d0", cursor: "pointer" }}
+            >
+              <X style={{ width: 15, height: 15 }} />
+            </button>
+          </div>
+        )}
+
         {/* Scrollable content */}
         <div className="panchayat-content">
 
@@ -383,18 +433,44 @@ export default function CitizenDashboard() {
           <div className="orb orb-1" style={{ opacity: 0.4 }} />
           <div className="orb orb-2" style={{ opacity: 0.3 }} />
 
-          {/* ── HOME TAB (Compact Viewport Fit) ──────────────── */}
+          {/* ── HOME TAB (Features Greetings Bar & Civic Complaints Post Button) ──── */}
           {currentTab === "home" && (
             <div className="fade-up fade-up-1" style={{ maxWidth: 960, margin: "0 auto" }}>
               
-              {/* Greetings */}
-              <div style={{ marginBottom: "0.85rem" }}>
-                <h1 className="greeting-title" style={{ fontSize: "1.5rem" }}>
-                  Welcome back, {displayName}
-                </h1>
-                <p className="greeting-sub" style={{ fontSize: "0.82rem", color: "#64748b", marginTop: "0.15rem" }}>
-                  Welcome to your village civic portal. Access services and report issues below.
-                </p>
+              {/* Greetings Bar */}
+              <div style={{ marginBottom: "0.85rem", display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
+                <div>
+                  <h1 className="greeting-title" style={{ fontSize: "1.5rem" }}>
+                    Welcome back, {displayName}
+                  </h1>
+                  <p className="greeting-sub" style={{ fontSize: "0.82rem", color: "#64748b", marginTop: "0.15rem" }}>
+                    Welcome to your village civic portal. Post new issues or access services below.
+                  </p>
+                </div>
+                {/* Direct Post Button right in Greetings Header */}
+                <button
+                  onClick={() => setModalOpen(true)}
+                  style={{
+                    background: "linear-gradient(135deg, #059669 0%, #064e3b 100%)",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: 10,
+                    padding: "0.55rem 1rem",
+                    fontWeight: 700,
+                    fontSize: "0.82rem",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    boxShadow: "0 4px 12px rgba(5,150,105,0.25)",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-1px)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
+                >
+                  <Plus style={{ width: 15, height: 15 }} />
+                  Post New Civic Issue
+                </button>
               </div>
 
               {/* Hero Banner */}
@@ -407,62 +483,220 @@ export default function CitizenDashboard() {
                   Your Village, Digitally Connected
                 </h2>
                 <p style={{ fontSize: "0.8rem", color: "#a7f3d0", margin: 0, opacity: 0.95, maxWidth: 640, lineHeight: 1.45 }}>
-                  Access village services, report civic problems, check weather, view market prices, and stay updated with local news — all in one place.
+                  Post civic issues with AI Vision, check live weather, view crop mandi rates, and track your complaints in the sidebar.
                 </p>
               </div>
 
               {/* Section Header */}
               <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "0.5rem" }}>
-                Platform Capabilities
+                Platform Services &amp; Issue Reporting
               </div>
 
               {/* 4 Feature Boxes (2 in a row) */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.75rem", marginBottom: "0.85rem" }}>
-                {FEATURE_BOXES.map(({ id, title, desc, icon: Icon, iconBg, iconColor }) => (
-                  <div
-                    key={id}
-                    onClick={() => setCurrentTab(id)}
-                    style={{
-                      background: "#ffffff",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 14,
-                      padding: "1rem 1.125rem",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                      e.currentTarget.style.borderColor = "#059669";
-                      e.currentTarget.style.boxShadow = "0 8px 24px rgba(5,150,105,0.12)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "none";
-                      e.currentTarget.style.borderColor = "#e2e8f0";
-                      e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.03)";
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.65rem" }}>
-                        <div style={{ width: 36, height: 36, borderRadius: 10, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <Icon style={{ width: 18, height: 18, color: iconColor }} />
-                        </div>
-                        <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#059669", display: "flex", alignItems: "center", gap: "0.2rem" }}>
-                          Explore <ArrowRight style={{ width: 11, height: 11 }} />
-                        </span>
+                
+                {/* 1. Civic Complaints Button (Posts New Issue) */}
+                <div
+                  onClick={() => setModalOpen(true)}
+                  style={{
+                    background: "linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)",
+                    border: "1.5px solid #059669",
+                    borderRadius: 14,
+                    padding: "1rem 1.125rem",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    boxShadow: "0 4px 14px rgba(5,150,105,0.08)",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    position: "relative",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = "0 8px 24px rgba(5,150,105,0.18)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "none";
+                    e.currentTarget.style.boxShadow = "0 4px 14px rgba(5,150,105,0.08)";
+                  }}
+                >
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.65rem" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: "#ecfdf5", border: "1px solid #a7f3d0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <AlertCircle style={{ width: 19, height: 19, color: "#059669" }} />
                       </div>
-                      <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.25rem" }}>
-                        {title}
-                      </div>
-                      <div style={{ fontSize: "0.76rem", color: "#64748b", lineHeight: 1.45 }}>
-                        {desc}
-                      </div>
+                      <span style={{ fontSize: "0.7rem", fontWeight: 800, color: "#ffffff", background: "#059669", padding: "0.2rem 0.55rem", borderRadius: 999, display: "flex", alignItems: "center", gap: "0.25rem", boxShadow: "0 2px 6px rgba(5,150,105,0.25)" }}>
+                        <Plus style={{ width: 11, height: 11 }} /> Post New Issue
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#042d20", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                      Civic Complaints
+                      <span style={{ fontSize: "0.65rem", color: "#059669", background: "#dcfce7", padding: "0.1rem 0.35rem", borderRadius: 4, fontWeight: 700 }}>
+                        AI Powered
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "0.76rem", color: "#475569", lineHeight: 1.45, marginBottom: "0.6rem" }}>
+                      Report problems in your village with photo upload, auto-description, and GPS detection.
                     </div>
                   </div>
-                ))}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "0.5rem", borderTop: "1px solid #dcfce7" }}>
+                    <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#059669" }}>
+                      Click to Post Issue →
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentTab("complaints");
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        fontSize: "0.7rem",
+                        color: "#64748b",
+                        textDecoration: "underline",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                      }}
+                      title="View all stored complaints in sidebar tab"
+                    >
+                      {complaints.length} Stored in Sidebar
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Weather Report */}
+                <div
+                  onClick={() => setCurrentTab("weather")}
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 14,
+                    padding: "1rem 1.125rem",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.borderColor = "#3b82f6";
+                    e.currentTarget.style.boxShadow = "0 8px 24px rgba(59,130,246,0.12)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "none";
+                    e.currentTarget.style.borderColor = "#e2e8f0";
+                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.03)";
+                  }}
+                >
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.65rem" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <CloudSun style={{ width: 18, height: 18, color: "#3b82f6" }} />
+                      </div>
+                      <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#3b82f6", display: "flex", alignItems: "center", gap: "0.2rem" }}>
+                        Explore <ArrowRight style={{ width: 11, height: 11 }} />
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.25rem" }}>
+                      Weather Report
+                    </div>
+                    <div style={{ fontSize: "0.76rem", color: "#64748b", lineHeight: 1.45 }}>
+                      Check current weather, 7-day outlooks and localized farming advisories.
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Market Prices */}
+                <div
+                  onClick={() => setCurrentTab("market")}
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 14,
+                    padding: "1rem 1.125rem",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.borderColor = "#059669";
+                    e.currentTarget.style.boxShadow = "0 8px 24px rgba(5,150,105,0.12)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "none";
+                    e.currentTarget.style.borderColor = "#e2e8f0";
+                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.03)";
+                  }}
+                >
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.65rem" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: "#ecfdf5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <TrendingUp style={{ width: 18, height: 18, color: "#059669" }} />
+                      </div>
+                      <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#059669", display: "flex", alignItems: "center", gap: "0.2rem" }}>
+                        Explore <ArrowRight style={{ width: 11, height: 11 }} />
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.25rem" }}>
+                      Market Prices
+                    </div>
+                    <div style={{ fontSize: "0.76rem", color: "#64748b", lineHeight: 1.45 }}>
+                      View daily mandi rates for paddy, cotton, maize and other crops.
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Local News */}
+                <div
+                  onClick={() => setCurrentTab("news")}
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 14,
+                    padding: "1rem 1.125rem",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.borderColor = "#8b5cf6";
+                    e.currentTarget.style.boxShadow = "0 8px 24px rgba(139,92,246,0.12)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "none";
+                    e.currentTarget.style.borderColor = "#e2e8f0";
+                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.03)";
+                  }}
+                >
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.65rem" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: "#f5f3ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <FileText style={{ width: 18, height: 18, color: "#8b5cf6" }} />
+                      </div>
+                      <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#8b5cf6", display: "flex", alignItems: "center", gap: "0.2rem" }}>
+                        Explore <ArrowRight style={{ width: 11, height: 11 }} />
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.25rem" }}>
+                      Local News
+                    </div>
+                    <div style={{ fontSize: "0.76rem", color: "#64748b", lineHeight: 1.45 }}>
+                      Official Gram Sabha notices, health camp announcements, and alerts.
+                    </div>
+                  </div>
+                </div>
+
               </div>
 
               {/* One Platform Footer Card */}
@@ -472,68 +706,135 @@ export default function CitizenDashboard() {
                 </div>
                 <div>
                   <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#042d20" }}>One Digital Village Platform</div>
-                  <div style={{ fontSize: "0.73rem", color: "#64748b" }}>Everything important about your village in one simple place.</div>
+                  <div style={{ fontSize: "0.73rem", color: "#64748b" }}>
+                    Stored complaints are safely preserved and trackable in the left sidebar <strong>Stored Complaints</strong> tab.
+                  </div>
                 </div>
               </div>
 
             </div>
           )}
 
-          {/* ── COMPLAINTS TAB ────────────────────────────────── */}
+          {/* ── STORED COMPLAINTS TAB (Loaded via Left Sidebar Complaints Button) ── */}
           {currentTab === "complaints" && (
             <div className="fade-up fade-up-2">
               <div className="glass-card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                
+                {/* Header with Title and New Issue Button */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
                   <div>
-                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>Civic Complaints</h2>
-                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: "0.25rem 0 0 0" }}>Report problems in your village and track department resolution progress</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <h2 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#042d20", margin: 0 }}>
+                        Stored Civic Complaints
+                      </h2>
+                      <span style={{ fontSize: "0.72rem", fontWeight: 800, background: "#059669", color: "#ffffff", padding: "0.15rem 0.55rem", borderRadius: 999 }}>
+                        {complaints.length} Total
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: "0.25rem 0 0 0" }}>
+                      All registered complaints for {session.village} stored with live status tracking
+                    </p>
                   </div>
                   <button className="add-report-btn" onClick={() => setModalOpen(true)}>
                     <Plus style={{ width: 15, height: 15 }} />
-                    Report New Issue
+                    Post New Issue
                   </button>
                 </div>
 
+                {/* Search and Filters Bar */}
+                <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+                  <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+                    <Search style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", width: 15, height: 15, color: "#94a3b8" }} />
+                    <input
+                      type="text"
+                      placeholder="Search stored complaints by title, ward, or category..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "0.55rem 0.75rem 0.55rem 2rem",
+                        borderRadius: 10,
+                        border: "1px solid #cbd5e1",
+                        fontSize: "0.82rem",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
+                    <Filter style={{ width: 14, height: 14, color: "#64748b", marginRight: "0.2rem" }} />
+                    {["all", "pending", "in_progress", "resolved"].map((st) => (
+                      <button
+                        key={st}
+                        onClick={() => setStatusFilter(st)}
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          padding: "0.45rem 0.75rem",
+                          borderRadius: 8,
+                          border: statusFilter === st ? "1px solid #059669" : "1px solid #e2e8f0",
+                          background: statusFilter === st ? "#ecfdf5" : "#ffffff",
+                          color: statusFilter === st ? "#059669" : "#64748b",
+                          cursor: "pointer",
+                          textTransform: "capitalize",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        {st === "all" ? "All" : st === "in_progress" ? "In Progress" : st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Complaints List */}
                 <div className="complaints-card" style={{ border: "1px solid #e2e8f0" }}>
-                  {complaints.map((c) => (
-                    <div key={c.id} className="complaint-item" style={{ padding: "1rem 1.25rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-                      {c.imageUrl ? (
-                        <img src={c.imageUrl} alt={c.title} style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: "1px solid #a7f3d0", flexShrink: 0 }} />
-                      ) : (
-                        <div className="complaint-avatar" style={{ background: c.avatarBg, width: 48, height: 48, borderRadius: 12, fontSize: "0.85rem", flexShrink: 0 }}>
-                          {c.id}
+                  {filteredComplaints.length === 0 ? (
+                    <div style={{ padding: "2.5rem 1rem", textAlign: "center", color: "#64748b" }}>
+                      <AlertCircle style={{ width: 32, height: 32, color: "#94a3b8", margin: "0 auto 0.5rem auto" }} />
+                      <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#1e293b" }}>No complaints found</div>
+                      <div style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>Try adjusting your search or filter criteria.</div>
+                    </div>
+                  ) : (
+                    filteredComplaints.map((c) => (
+                      <div key={c.id} className="complaint-item" style={{ padding: "1rem 1.25rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
+                        {c.imageUrl ? (
+                          <img src={c.imageUrl} alt={c.title} style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: "1px solid #a7f3d0", flexShrink: 0 }} />
+                        ) : (
+                          <div className="complaint-avatar" style={{ background: c.avatarBg, width: 48, height: 48, borderRadius: 12, fontSize: "0.85rem", flexShrink: 0 }}>
+                            {c.id}
+                          </div>
+                        )}
+                        <div className="complaint-info" style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.2rem" }}>
+                            <span className="complaint-title" style={{ fontSize: "0.95rem", fontWeight: 800 }}>{c.title}</span>
+                            {c.aiGenerated && (
+                              <span style={{ fontSize: "0.65rem", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", padding: "0.1rem 0.4rem", borderRadius: 999, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.15rem" }}>
+                                <Sparkles style={{ width: 9, height: 9 }} /> AI Auto-Written
+                              </span>
+                            )}
+                          </div>
+                          {c.description && (
+                            <div style={{ fontSize: "0.78rem", color: "#475569", marginBottom: "0.35rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                              {c.description}
+                            </div>
+                          )}
+                          <div className="complaint-name" style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                            📍 {c.location} · <span style={{ color: "#059669", fontWeight: 600 }}>{c.category}</span> · {c.date}
+                          </div>
                         </div>
-                      )}
-                      <div className="complaint-info" style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.2rem" }}>
-                          <span className="complaint-title" style={{ fontSize: "0.95rem", fontWeight: 800 }}>{c.title}</span>
-                          {c.aiGenerated && (
-                            <span style={{ fontSize: "0.65rem", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", padding: "0.1rem 0.4rem", borderRadius: 999, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.15rem" }}>
-                              <Sparkles style={{ width: 9, height: 9 }} /> AI Auto-Written
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35rem" }}>
+                          <span className={`complaint-status ${c.status}`} style={{ padding: "0.35rem 0.85rem", fontSize: "0.78rem" }}>
+                            {c.status === "in_progress" ? "In Progress" : c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                          </span>
+                          {c.urgency && (
+                            <span style={{ fontSize: "0.68rem", fontWeight: 700, color: c.urgency === "High" ? "#dc2626" : c.urgency === "Medium" ? "#d97706" : "#16a34a", background: c.urgency === "High" ? "#fef2f2" : c.urgency === "Medium" ? "#fffbeb" : "#f0fdf4", padding: "0.15rem 0.5rem", borderRadius: 6, border: `1px solid ${c.urgency === "High" ? "#fca5a5" : c.urgency === "Medium" ? "#fde68a" : "#86efac"}` }}>
+                              {c.urgency} Urgency
                             </span>
                           )}
                         </div>
-                        {c.description && (
-                          <div style={{ fontSize: "0.78rem", color: "#475569", marginBottom: "0.35rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                            {c.description}
-                          </div>
-                        )}
-                        <div className="complaint-name" style={{ fontSize: "0.78rem", color: "#64748b" }}>
-                          📍 {c.location} · <span style={{ color: "#059669", fontWeight: 600 }}>{c.category}</span> · {c.date}
-                        </div>
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35rem" }}>
-                        <span className={`complaint-status ${c.status}`} style={{ padding: "0.35rem 0.85rem", fontSize: "0.78rem" }}>
-                          {c.status === "in_progress" ? "In Progress" : c.status.charAt(0).toUpperCase() + c.status.slice(1)}
-                        </span>
-                        {c.urgency && (
-                          <span style={{ fontSize: "0.68rem", fontWeight: 700, color: c.urgency === "High" ? "#dc2626" : c.urgency === "Medium" ? "#d97706" : "#16a34a", background: c.urgency === "High" ? "#fef2f2" : c.urgency === "Medium" ? "#fffbeb" : "#f0fdf4", padding: "0.15rem 0.5rem", borderRadius: 6, border: `1px solid ${c.urgency === "High" ? "#fca5a5" : c.urgency === "Medium" ? "#fde68a" : "#86efac"}` }}>
-                            {c.urgency} Urgency
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -886,7 +1187,7 @@ export default function CitizenDashboard() {
                   type="submit"
                   style={{ flex: 1.5, padding: "0.7rem", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #059669 0%, #064e3b 100%)", color: "#ffffff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", boxShadow: "0 4px 12px rgba(5,150,105,0.25)" }}
                 >
-                  <Send style={{ width: 15, height: 15 }} /> Submit Issue Report
+                  <Send style={{ width: 15, height: 15 }} /> Submit &amp; Store Issue
                 </button>
               </div>
 

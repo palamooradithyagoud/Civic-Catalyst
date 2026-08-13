@@ -2442,3 +2442,170 @@
   transform: translateX(-50%);
   opacity: 0.05 !important;
 }
+
+/* =========================================================
+   CITIZEN DASHBOARD — Home Grid & Cards
+   ========================================================= */
+
+/* ── 2 × 2 Home Grid ────────────────────────────────────── */
+.citizen-home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+  max-width: 720px;
+}
+
+@media (max-width: 680px) {
+  .citizen-home-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Home Feature Card ───────────────────────────────────── */
+.citizen-home-card {
+  padding: 1.5rem !important;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.citizen-home-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.125rem;
+}
+
+.citizen-home-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.citizen-home-card:hover .citizen-home-card-icon {
+  transform: scale(1.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.citizen-home-card-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.citizen-home-card-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #042d20;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.4rem;
+}
+
+.citizen-home-card-desc {
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.6;
+  flex: 1;
+}
+
+.citizen-home-card-action {
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.citizen-home-card:hover .citizen-home-card-action {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ── Coming Soon Placeholder (Citizen) ───────────────────── */
+.citizen-coming-soon-wrap {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 3rem;
+}
+
+.citizen-coming-soon {
+  text-align: center;
+  max-width: 420px;
+  padding: 3rem 2rem !important;
+}
+
+.citizen-cs-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+}
+
+.citizen-cs-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #042d20;
+  margin-bottom: 0.5rem;
+}
+
+.citizen-cs-desc {
+  font-size: 0.8125rem;
+  color: #64748b;
+  line-height: 1.65;
+  margin-bottom: 1.25rem;
+}
+
+.citizen-cs-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.8rem;
+  background: #f8faf8;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Include citizen cards in the morphing hover system */
+.citizen-home-card {
+  transition: border-radius cubic-bezier(0.075, 0.82, 0.165, 1) 0.8s,
+              transform cubic-bezier(0.075, 0.82, 0.165, 1) 0.8s,
+              box-shadow cubic-bezier(0.075, 0.82, 0.165, 1) 0.8s,
+              border-color 0.3s ease !important;
+}
+
+.citizen-home-card:hover {
+  border-bottom-right-radius: 40px !important;
+  border-top-left-radius: 40px !important;
+  transform: scale(1.025) !important;
+  border-color: #047857 !important;
+  box-shadow: 0 16px 40px rgba(4, 45, 32, 0.35), 0 0 30px rgba(6, 78, 59, 0.25) !important;
+  z-index: 5;
+}
+
+/* ── Pulse dot animation ─────────────────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.4); }
+}
