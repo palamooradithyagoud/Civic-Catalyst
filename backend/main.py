@@ -1,29 +1,22 @@
 """
 Nivaaran AI — FastAPI Backend
-Phase 1: Demo session endpoints + Smart Inventory API
+Phase 1: Demo session endpoints + Supabase Medical Inventory API
 """
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from db import init_db
-from seed_data import seed_database
 from routers import demo, inventory, complaints
 from models.schemas import HealthResponse
 
 load_dotenv()
 
-# ── Startup Lifecycle ────────────────────────────────────────────────────────
-
-init_db()
-seed_database(force=False)
-
 # ── App ──────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="Nivaaran AI API",
-    description="AI-assisted civic issue reporting platform & ASHA Smart Inventory System.",
+    description="AI-assisted civic issue reporting platform & Supabase Medical Inventory System.",
     version="0.1.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -58,7 +51,7 @@ async def health_check():
     """Service health check endpoint."""
     return HealthResponse(
         status="ok",
-        service="Nivaaran AI API",
+        service="Nivaaran AI API (Supabase Connected)",
         version="0.1.0",
     )
 
@@ -66,8 +59,7 @@ async def health_check():
 @app.get("/", tags=["system"])
 async def root():
     return {
-        "message": "Nivaaran AI API is running.",
+        "message": "Nivaaran AI API is running with Supabase backend.",
         "docs": "/api/docs",
         "version": "0.1.0",
     }
-

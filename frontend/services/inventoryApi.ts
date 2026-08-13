@@ -266,3 +266,62 @@ export async function triggerReSeed(): Promise<{ status: string; items_count: nu
   const res = await fetch(`${API_BASE_URL}/seed`, { method: "POST" });
   return handleResponse(res);
 }
+
+export interface MedicineRequest {
+  id: number;
+  request_id: string;
+  asha_worker_name: string;
+  medicine_name: string;
+  requested_quantity: number;
+  approved_quantity: number;
+  dispatched_quantity: number;
+  unit: string;
+  urgency: "Normal" | "High" | "Urgent";
+  reason: string;
+  notes?: string;
+  status: "PENDING" | "UNDER_REVIEW" | "APPROVED" | "PARTIALLY_APPROVED" | "REJECTED" | "DISPATCHED" | "RECEIVED";
+  dispatch_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchMedicineRequests(): Promise<MedicineRequest[]> {
+  const res = await fetch(`${API_BASE_URL}/medicine-requests`, { cache: "no-store" });
+  return handleResponse<MedicineRequest[]>(res);
+}
+
+export async function createMedicineRequestApi(payload: {
+  medicine_name: string;
+  requested_quantity: number;
+  unit?: string;
+  urgency?: string;
+  reason?: string;
+  notes?: string;
+}): Promise<{ message: string; request: MedicineRequest }> {
+  const res = await fetch(`${API_BASE_URL}/medicine-requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<{ message: string; request: MedicineRequest }>(res);
+}
+
+export async function updateMedicineRequestStatusApi(
+  requestId: string,
+  action: "APPROVE" | "PARTIALLY_APPROVE" | "REJECT" | "DISPATCH" | "MARK_RECEIVED",
+  approvedQuantity: number = 0,
+  dispatchedQuantity: number = 0,
+  notes: string = ""
+): Promise<{ message: string; request: MedicineRequest }> {
+  const res = await fetch(`${API_BASE_URL}/medicine-requests/${requestId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action,
+      approved_quantity: approvedQuantity,
+      dispatched_quantity: dispatchedQuantity,
+      notes,
+    }),
+  });
+  return handleResponse<{ message: string; request: MedicineRequest }>(res);
+}

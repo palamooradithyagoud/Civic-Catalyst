@@ -33,6 +33,10 @@ import {
   AnalyticsData,
   Category,
   Supplier,
+  MedicineRequest,
+  fetchMedicineRequests,
+  createMedicineRequestApi,
+  updateMedicineRequestStatusApi,
 } from "@/services/inventoryApi";
 
 import {
@@ -76,6 +80,7 @@ import {
   Hospital,
   Truck,
   Building,
+  Inbox,
 } from "lucide-react";
 
 export default function AshaInventoryDashboardPage() {
@@ -88,7 +93,7 @@ export default function AshaInventoryDashboardPage() {
 
   // Active Tab State
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "mandal" | "inventory" | "distribute" | "history" | "alerts" | "analytics" | "transactions"
+    "dashboard" | "mandal" | "inventory" | "distribute" | "history" | "alerts" | "analytics" | "transactions" | "mandal_req"
   >("dashboard");
 
   // Language State (English, Hindi, Telugu)
@@ -143,6 +148,7 @@ export default function AshaInventoryDashboardPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [medicineRequests, setMedicineRequests] = useState<MedicineRequest[]>([]);
 
   // Filtering States
   const [searchQuery, setSearchQuery] = useState("");
@@ -154,7 +160,33 @@ export default function AshaInventoryDashboardPage() {
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [isRestockOpen, setIsRestockOpen] = useState(false);
   const [isDistributeOpen, setIsDistributeOpen] = useState(false);
+  const [isMandalReqOpen, setIsMandalReqOpen] = useState(false);
   const [selectedItemForModal, setSelectedItemForModal] = useState<InventoryItem | null>(null);
+
+  // Free-Text ASHA Medicine Request Form State
+  const [freeTextReqForm, setFreeTextReqForm] = useState({
+    medicine_name: "",
+    requested_quantity: 100,
+    unit: "Packets",
+    urgency: "Normal" as "Normal" | "High" | "Urgent",
+    reason: "",
+    notes: "",
+  });
+
+  // Mandal Decision Action Modal State
+  const [mandalActionModal, setMandalActionModal] = useState<{
+    targetReq: MedicineRequest | null;
+    actionType: "PARTIAL" | "REJECT" | "DISPATCH" | null;
+    approvedQty: number;
+    dispatchedQty: number;
+    notes: string;
+  }>({
+    targetReq: null,
+    actionType: null,
+    approvedQty: 0,
+    dispatchedQty: 0,
+    notes: "",
+  });
 
   // Form States - New Item
   const [newItemForm, setNewItemForm] = useState({
@@ -214,7 +246,7 @@ export default function AshaInventoryDashboardPage() {
     setLoading(true);
     setSyncing(true);
     try {
-      const [kpiRes, itemRes, txRes, distRes, alertRes, analyticsRes, catRes, supRes] = await Promise.all([
+      const [kpiRes, itemRes, txRes, distRes, alertRes, analyticsRes, catRes, supRes, medReqRes] = await Promise.all([
         fetchDashboardKPIs(),
         fetchInventoryItems(),
         fetchTransactions(),
@@ -223,6 +255,7 @@ export default function AshaInventoryDashboardPage() {
         fetchAnalytics(),
         fetchCategories(),
         fetchSuppliers(),
+        fetchMedicineRequests(),
       ]);
 
       setKpis(kpiRes);
@@ -233,6 +266,7 @@ export default function AshaInventoryDashboardPage() {
       setAnalytics(analyticsRes);
       setCategories(catRes);
       setSuppliers(supRes);
+      setMedicineRequests(medReqRes);
 
       if (distributeForm.item_id === 0 && itemRes.length > 0) {
         setDistributeForm((prev) => ({ ...prev, item_id: itemRes[0].id }));
@@ -324,6 +358,38 @@ export default function AshaInventoryDashboardPage() {
     setIsDistributeOpen(true);
   };
 
+  // Medicine Request Workflow Handlers
+  const handleApproveRequest = async (r: MedicineRequest) => {
+    try {
+      await updateMedicineRequestStatusApi(r.request_id, "APPROVE", r.requested_quantity);
+      showToast("✓ Request " + r.request_id + " Approved for " + r.requested_quantity + " " + r.unit);
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message || "Failed to approve request", "error");
+    }
+  };
+
+  const handleDispatchRequest = async (r: MedicineRequest) => {
+    try {
+      const sendQty = r.approved_quantity > 0 ? r.approved_quantity : r.requested_quantity;
+      await updateMedicineRequestStatusApi(r.request_id, "DISPATCH", sendQty, sendQty, "Dispatched from Mandal Depot");
+      showToast("🚚 Dispatched " + sendQty + " " + r.unit + " of " + r.medicine_name + " to ASHA Worker!");
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message || "Failed to dispatch", "error");
+    }
+  };
+
+  const handleMarkReceivedRequest = async (r: MedicineRequest) => {
+    try {
+      await updateMedicineRequestStatusApi(r.request_id, "MARK_RECEIVED");
+      showToast("✓ Received " + r.dispatched_quantity + " " + r.unit + " of " + r.medicine_name + "! Village inventory updated.");
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message || "Failed to mark received", "error");
+    }
+  };
+
   // Filtered Inventory Items
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
@@ -399,17 +465,17 @@ export default function AshaInventoryDashboardPage() {
         <nav className="sidebar-nav">
           {(portalMode === "mandal"
             ? [
-                { id: "mandal", label: "Shortages & Deliveries", icon: Hospital, badge: items.filter(i => i.current_quantity === 0).length, alert: items.filter(i => i.current_quantity === 0).length > 0 },
+                { id: "mandal", label: "ASHA Requests & Shortages", icon: Inbox, badge: medicineRequests.filter(r => r.status === "PENDING").length, alert: medicineRequests.filter(r => r.status === "PENDING").length > 0 },
                 { id: "transactions", label: "Dispatched Delivery Logs", icon: Truck, badge: transactions.length },
                 { id: "alerts", label: "Village Stock Alerts", icon: AlertTriangle, badge: alerts.length, alert: alerts.length > 0 },
               ]
             : [
                 { id: "dashboard", label: t("navDashboard"), icon: LayoutDashboard, badge: null },
+                { id: "mandal_req", label: "Request Medicine (మండల్ HQ)", icon: Inbox, badge: medicineRequests.filter(r => r.status === "PENDING" || r.status === "DISPATCHED").length, alert: medicineRequests.filter(r => r.status === "DISPATCHED").length > 0 },
                 { id: "inventory", label: t("navInventory"), icon: Package, badge: items.length },
                 { id: "distribute", label: t("navDistribute"), icon: SendHorizontal, badge: null },
                 { id: "history", label: t("navHistory"), icon: History, badge: distributions.length },
                 { id: "alerts", label: t("navAlerts"), icon: AlertTriangle, badge: alerts.length, alert: alerts.length > 0 },
-                { id: "analytics", label: t("navAnalytics"), icon: BarChart3, badge: null },
                 { id: "transactions", label: t("navTransactions"), icon: FileSpreadsheet, badge: transactions.length },
               ]
           ).map((tab) => {
@@ -522,56 +588,33 @@ export default function AshaInventoryDashboardPage() {
               </select>
             </div>
 
-            <button
-              onClick={loadAllData}
-              disabled={syncing}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                padding: "0.45rem 0.85rem",
-                borderRadius: "8px",
-                background: "#ffffff",
-                border: "1px solid #cbd5e1",
-                fontSize: "0.78rem",
-                fontWeight: 700,
-                color: "#334155",
-                cursor: "pointer",
-              }}
-            >
-              <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
-              <span>{syncing ? t("syncing") : t("syncData")}</span>
-            </button>
-
+            {/* Portal Switcher Pill */}
             <button
               onClick={() => {
-                setRestockForm({
-                  item_id: items[0]?.id || 1,
-                  quantity: 50,
-                  batch_number: "",
-                  expiry_date: "",
-                  supplier_id: 1,
-                  reference: "PHC_REFILL",
-                  notes: "Manual Restock Request",
-                });
-                setIsRestockOpen(true);
+                if (portalMode === "mandal") {
+                  setPortalMode("village");
+                  setActiveTab("dashboard");
+                } else {
+                  setPortalMode("mandal");
+                  setActiveTab("mandal");
+                }
               }}
               style={{
-                display: "inline-flex",
+                display: "flex",
                 alignItems: "center",
                 gap: "0.4rem",
-                padding: "0.45rem 0.85rem",
+                background: portalMode === "mandal" ? "#eff6ff" : "#ecfdf5",
+                color: portalMode === "mandal" ? "#1d4ed8" : "#047857",
+                border: portalMode === "mandal" ? "1px solid #bfdbfe" : "1px solid #a7f3d0",
+                padding: "0.4rem 0.8rem",
                 borderRadius: "8px",
-                background: "#047857",
-                color: "white",
-                border: "none",
                 fontSize: "0.78rem",
-                fontWeight: 700,
-                cursor: "pointer",
+                fontWeight: 800,
+                cursor: "pointer"
               }}
             >
-              <Plus size={14} />
-              <span>+ {t("btnRestock")}</span>
+              {portalMode === "mandal" ? <Hospital size={16} /> : <UserCheck size={16} />}
+              <span>{portalMode === "mandal" ? "Mode: Mandal Medical HQ" : "Mode: ASHA Village"}</span>
             </button>
 
             {/* Profile Pill */}
@@ -590,8 +633,35 @@ export default function AshaInventoryDashboardPage() {
         {/* Content Container */}
         <div className="panchayat-content" style={{ padding: "1.5rem", position: "relative" }}>
 
+          {/* DISPATCHED NOTIFICATION BANNER FOR ASHA WORKER */}
+          {portalMode !== "mandal" && medicineRequests.filter(r => r.status === "DISPATCHED").length > 0 && (
+            <div style={{ background: "linear-gradient(135deg, #059669, #047857)", borderRadius: "16px", padding: "1.25rem 1.5rem", color: "white", boxShadow: "0 10px 15px -3px rgba(4, 120, 87, 0.3)", marginBottom: "1.25rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+                <div>
+                  <div style={{ fontSize: "1.1rem", fontWeight: 900, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <CheckCircle2 size={24} style={{ color: "#6ee7b7" }} />
+                    ✅ Your medicine request has been dispatched by Mandal Central Hospital!
+                  </div>
+                  <div style={{ fontSize: "0.82rem", color: "#a7f3d0", marginTop: "0.35rem", display: "flex", flexWrap: "wrap", gap: "1.25rem" }}>
+                    {medicineRequests.filter(r => r.status === "DISPATCHED").map(r => (
+                      <span key={r.id} style={{ background: "rgba(255,255,255,0.15)", padding: "0.3rem 0.75rem", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)" }}>
+                        <strong>{r.medicine_name}</strong> | Req ID: <code>{r.request_id}</code> | Approved: <strong>{r.approved_quantity}</strong> | Dispatched: <strong>{r.dispatched_quantity} {r.unit}</strong> | Date: {r.dispatch_date || r.updated_at}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab("mandal_req")}
+                  style={{ background: "#ffffff", color: "#047857", border: "none", padding: "0.55rem 1.1rem", borderRadius: "10px", fontSize: "0.82rem", fontWeight: 900, cursor: "pointer" }}
+                >
+                  View & Mark Received →
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── TAB: MANDAL HOSPITAL OFFICE WORKSPACE ──────────────────────── */}
-          {(activeTab === "mandal" || portalMode === "mandal") && (
+          {activeTab === "mandal" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
               {/* Mandal Hospital Header Banner */}
               <div
@@ -641,6 +711,14 @@ export default function AshaInventoryDashboardPage() {
 
               {/* Mandal Overview KPIs */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
+                <div style={{ background: "#eff6ff", padding: "1.2rem", borderRadius: "14px", border: "1px solid #bfdbfe" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#1e40af" }}>📩 Pending ASHA Requests</div>
+                  <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "#1d4ed8", marginTop: "0.2rem" }}>
+                    {medicineRequests.filter(r => r.status === "PENDING" || r.status === "UNDER_REVIEW").length} Requests
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "#2563eb", fontWeight: 700 }}>Awaiting Mandal Review & Approval</div>
+                </div>
+
                 <div style={{ background: "#fef2f2", padding: "1.2rem", borderRadius: "14px", border: "2px solid #fca5a5" }}>
                   <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#991b1b" }}>⚠️ Village Out-of-Stock Items</div>
                   <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "#dc2626", marginTop: "0.2rem" }}>
@@ -664,6 +742,169 @@ export default function AshaInventoryDashboardPage() {
                   </div>
                   <div style={{ fontSize: "0.72rem", color: "#15803d", fontWeight: 700 }}>Mandal HQ → Village Sub-Centers</div>
                 </div>
+              </div>
+
+              {/* ── SECTION: ASHA MEDICINE REQUESTS & MANDAL FULFILLMENT ── */}
+              <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", border: "2px solid #bfdbfe", boxShadow: "0 4px 14px rgba(37, 99, 235, 0.06)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", borderBottom: "1px solid #dbeafe", paddingBottom: "0.85rem", flexWrap: "wrap", gap: "0.75rem" }}>
+                  <div>
+                    <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#1e3a8a", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <Inbox size={22} style={{ color: "#2563eb" }} />
+                      📥 ASHA Worker Medicine Requests (మండల్ మెడిసిన్ రిక్వెస్ట్‌లు)
+                    </div>
+                    <div style={{ fontSize: "0.78rem", color: "#3b82f6", marginTop: "0.2rem" }}>
+                      Free-text supply requests submitted by ASHA workers across villages. Review, Approve custom quantities, and Dispatch.
+                    </div>
+                  </div>
+                </div>
+
+                {medicineRequests.length === 0 ? (
+                  <div style={{ padding: "2rem", textAlign: "center", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0", color: "#64748b", fontSize: "0.85rem" }}>
+                    No pending medicine requests from ASHA workers at this moment.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                      <thead>
+                        <tr style={{ background: "#f0f9ff", borderBottom: "1px solid #bae6fd", color: "#0369a1", textAlign: "left" }}>
+                          <th style={{ padding: "0.75rem 1rem" }}>Req ID</th>
+                          <th style={{ padding: "0.75rem 1rem" }}>ASHA Worker & Village</th>
+                          <th style={{ padding: "0.75rem 1rem" }}>Medicine / Supply</th>
+                          <th style={{ padding: "0.75rem 1rem" }}>Requested Qty</th>
+                          <th style={{ padding: "0.75rem 1rem" }}>Approved / Dispatched</th>
+                          <th style={{ padding: "0.75rem 1rem" }}>Urgency</th>
+                          <th style={{ padding: "0.75rem 1rem" }}>Reason</th>
+                          <th style={{ padding: "0.75rem 1rem" }}>Status</th>
+                          <th style={{ padding: "0.75rem 1rem", textAlign: "right" }}>Mandal Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {medicineRequests.map((r) => {
+                          const isPending = r.status === "PENDING" || r.status === "UNDER_REVIEW";
+                          const isApproved = r.status === "APPROVED" || r.status === "PARTIALLY_APPROVED";
+                          const isDispatched = r.status === "DISPATCHED";
+                          const isReceived = r.status === "RECEIVED";
+                          const isRejected = r.status === "REJECTED";
+
+                          return (
+                            <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                              <td style={{ padding: "0.75rem 1rem", fontWeight: 800, color: "#64748b", fontFamily: "monospace" }}>
+                                {r.request_id}
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <div style={{ fontWeight: 800, color: "#0f172a" }}>{r.asha_worker_name || "Sunita Devi"}</div>
+                                <div style={{ fontSize: "0.7rem", color: "#64748b" }}>Ward 3 & 4 Sub-Center</div>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <div style={{ fontWeight: 800, color: "#0369a1" }}>{r.medicine_name}</div>
+                                {r.notes && <div style={{ fontSize: "0.68rem", color: "#64748b" }}>Note: {r.notes}</div>}
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem", fontWeight: 800, color: "#0f172a" }}>
+                                {r.requested_quantity} {r.unit}
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <div style={{ fontWeight: 800, color: "#047857" }}>
+                                  Appr: {r.approved_quantity} {r.unit}
+                                </div>
+                                <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
+                                  Disp: {r.dispatched_quantity} {r.unit}
+                                </div>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <span style={{
+                                  fontSize: "0.7rem",
+                                  fontWeight: 800,
+                                  padding: "0.15rem 0.5rem",
+                                  borderRadius: "999px",
+                                  background: r.urgency === "Urgent" ? "#fef2f2" : r.urgency === "High" ? "#fff7ed" : "#f0fdf4",
+                                  color: r.urgency === "Urgent" ? "#dc2626" : r.urgency === "High" ? "#ea580c" : "#047857",
+                                  border: r.urgency === "Urgent" ? "1px solid #fca5a5" : r.urgency === "High" ? "1px solid #ffedd5" : "1px solid #bbf7d0",
+                                }}>
+                                  {r.urgency || "Normal"}
+                                </span>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem", color: "#475569" }}>
+                                {r.reason}
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <span style={{
+                                  fontSize: "0.72rem",
+                                  fontWeight: 800,
+                                  padding: "0.2rem 0.65rem",
+                                  borderRadius: "999px",
+                                  background: isPending ? "#fef3c7" : isApproved ? "#dbeafe" : isDispatched ? "#ecfdf5" : isReceived ? "#dcfce7" : "#fef2f2",
+                                  color: isPending ? "#d97706" : isApproved ? "#1d4ed8" : isDispatched ? "#047857" : isReceived ? "#15803d" : "#dc2626",
+                                  border: isPending ? "1px solid #fde68a" : isApproved ? "1px solid #bfdbfe" : isDispatched ? "1px solid #a7f3d0" : isReceived ? "1px solid #86efac" : "1px solid #fca5a5",
+                                }}>
+                                  {r.status.replace("_", " ")}
+                                </span>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem", textAlign: "right" }}>
+                                <div style={{ display: "flex", gap: "0.35rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                                  {isPending && (
+                                    <>
+                                      <button
+                                        onClick={() => handleApproveRequest(r)}
+                                        style={{ background: "#dbeafe", color: "#1d4ed8", border: "1px solid #bfdbfe", padding: "0.3rem 0.55rem", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer" }}
+                                      >
+                                        ✓ Approve
+                                      </button>
+
+                                      <button
+                                        onClick={() => {
+                                          setMandalActionModal({
+                                            targetReq: r,
+                                            actionType: "PARTIAL",
+                                            approvedQty: Math.floor(r.requested_quantity * 0.8),
+                                            dispatchedQty: 0,
+                                            notes: "Stock constraint at Mandal HQ - Partial approval",
+                                          });
+                                        }}
+                                        style={{ background: "#fff7ed", color: "#ea580c", border: "1px solid #ffedd5", padding: "0.3rem 0.55rem", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer" }}
+                                      >
+                                        ⚡ Partial
+                                      </button>
+
+                                      <button
+                                        onClick={() => {
+                                          setMandalActionModal({
+                                            targetReq: r,
+                                            actionType: "REJECT",
+                                            approvedQty: 0,
+                                            dispatchedQty: 0,
+                                            notes: "Item out of stock at Mandal Depot",
+                                          });
+                                        }}
+                                        style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", padding: "0.3rem 0.55rem", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer" }}
+                                      >
+                                        ❌ Reject
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {(isPending || isApproved) && !isDispatched && !isReceived && !isRejected && (
+                                    <button
+                                      onClick={() => handleDispatchRequest(r)}
+                                      style={{ background: "#047857", color: "white", border: "none", padding: "0.35rem 0.7rem", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+                                    >
+                                      🚚 Send / Dispatch
+                                    </button>
+                                  )}
+
+                                  {(isDispatched || isReceived) && (
+                                    <span style={{ fontSize: "0.72rem", color: "#047857", fontWeight: 800 }}>
+                                      ✅ Dispatched ({r.dispatched_quantity} {r.unit})
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* SECTION 1: VILLAGE STOCK SHORTAGES & MANDAL DELIVERY ACTION */}
@@ -1685,8 +1926,152 @@ export default function AshaInventoryDashboardPage() {
               </div>
             </div>
           )}
+
+          {/* ── TAB 7: MANDAL HQ REQUESTS & TRACKING (MY REQUESTS) ── */}
+          {activeTab === "mandal_req" && portalMode === "village" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              {/* Header & Controls Bar */}
+              <div style={{ background: "#ffffff", borderRadius: "14px", padding: "1.25rem", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+                <div>
+                  <div style={{ fontSize: "1.15rem", fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <Inbox size={22} style={{ color: "#047857" }} />
+                    My Medicine Requisitions from Mandal HQ (నా మందుల రిక్వెస్ట్‌లు)
+                  </div>
+                  <div style={{ fontSize: "0.78rem", color: "#64748b", marginTop: "0.2rem" }}>
+                    Request any medicine or health supply directly from Mandal Medical HQ and track real-time dispatch status.
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsMandalReqOpen(true)}
+                  style={{ background: "#047857", color: "white", border: "none", padding: "0.65rem 1.25rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", boxShadow: "0 2px 8px rgba(4,120,87,0.25)" }}
+                >
+                  <Plus size={18} />
+                  <span>+ Request Medicine (నూతన రిక్వెస్ట్ చేయండి)</span>
+                </button>
+              </div>
+
+              {/* My Requests Stream Table */}
+              <div style={{ background: "#ffffff", borderRadius: "14px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#475569", textAlign: "left" }}>
+                        <th style={{ padding: "0.75rem 1rem" }}>Request ID</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Medicine / Supply</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Requested Qty</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Approved / Dispatched</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Urgency</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Reason</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Date</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Status</th>
+                        <th style={{ padding: "0.75rem 1rem", textAlign: "right" }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {medicineRequests.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>
+                            No medicine requisitions submitted yet. Click <strong>+ Request Medicine</strong> above to create a new requisition.
+                          </td>
+                        </tr>
+                      ) : (
+                        medicineRequests.map((r) => {
+                          const isPending = r.status === "PENDING" || r.status === "UNDER_REVIEW";
+                          const isApproved = r.status === "APPROVED" || r.status === "PARTIALLY_APPROVED";
+                          const isDispatched = r.status === "DISPATCHED";
+                          const isReceived = r.status === "RECEIVED";
+                          const isRejected = r.status === "REJECTED";
+
+                          return (
+                            <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                              <td style={{ padding: "0.75rem 1rem", fontWeight: 800, color: "#64748b", fontFamily: "monospace" }}>
+                                {r.request_id}
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <div style={{ fontWeight: 800, color: "#0f172a" }}>{r.medicine_name}</div>
+                                {r.notes && <div style={{ fontSize: "0.68rem", color: "#64748b" }}>Note: {r.notes}</div>}
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem", fontWeight: 800, color: "#0f172a" }}>
+                                {r.requested_quantity} {r.unit}
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <div style={{ fontWeight: 800, color: "#047857" }}>
+                                  Appr: {r.approved_quantity} {r.unit}
+                                </div>
+                                <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
+                                  Disp: {r.dispatched_quantity} {r.unit}
+                                </div>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <span style={{
+                                  fontSize: "0.7rem",
+                                  fontWeight: 800,
+                                  padding: "0.15rem 0.5rem",
+                                  borderRadius: "999px",
+                                  background: r.urgency === "Urgent" ? "#fef2f2" : r.urgency === "High" ? "#fff7ed" : "#f0fdf4",
+                                  color: r.urgency === "Urgent" ? "#dc2626" : r.urgency === "High" ? "#ea580c" : "#047857",
+                                  border: r.urgency === "Urgent" ? "1px solid #fca5a5" : r.urgency === "High" ? "1px solid #ffedd5" : "1px solid #bbf7d0",
+                                }}>
+                                  {r.urgency || "Normal"}
+                                </span>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem", color: "#475569" }}>
+                                {r.reason}
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem", color: "#64748b", fontSize: "0.75rem" }}>
+                                {r.created_at.split(" ")[0]}
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem" }}>
+                                <span style={{
+                                  fontSize: "0.72rem",
+                                  fontWeight: 800,
+                                  padding: "0.2rem 0.65rem",
+                                  borderRadius: "999px",
+                                  background: isPending ? "#fef3c7" : isApproved ? "#dbeafe" : isDispatched ? "#ecfdf5" : isReceived ? "#dcfce7" : "#fef2f2",
+                                  color: isPending ? "#d97706" : isApproved ? "#1d4ed8" : isDispatched ? "#047857" : isReceived ? "#15803d" : "#dc2626",
+                                  border: isPending ? "1px solid #fde68a" : isApproved ? "1px solid #bfdbfe" : isDispatched ? "1px solid #a7f3d0" : isReceived ? "1px solid #86efac" : "1px solid #fca5a5",
+                                }}>
+                                  {r.status.replace("_", " ")}
+                                </span>
+                              </td>
+                              <td style={{ padding: "0.75rem 1rem", textAlign: "right" }}>
+                                {isDispatched && (
+                                  <button
+                                    onClick={() => handleMarkReceivedRequest(r)}
+                                    style={{ background: "#047857", color: "white", border: "none", padding: "0.4rem 0.75rem", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 800, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
+                                  >
+                                    ✓ Mark Received
+                                  </button>
+                                )}
+                                {isReceived && (
+                                  <span style={{ fontSize: "0.75rem", color: "#15803d", fontWeight: 800 }}>
+                                    ✓ Stock Received
+                                  </span>
+                                )}
+                                {isPending && (
+                                  <span style={{ fontSize: "0.72rem", color: "#d97706", fontWeight: 700 }}>
+                                    ⏳ Awaiting Mandal
+                                  </span>
+                                )}
+                                {isRejected && (
+                                  <span style={{ fontSize: "0.72rem", color: "#dc2626", fontWeight: 700 }}>
+                                    ❌ Rejected
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
       {/* ── MODAL 1: ADD NEW ITEM MODAL ─────────────────────── */}
       {isAddItemOpen && (
@@ -1942,6 +2327,216 @@ export default function AshaInventoryDashboardPage() {
                 </button>
                 <button type="submit" style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#047857", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "white", cursor: "pointer" }}>
                   {t("btnSubmit")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 4: FREE-TEXT MEDICINE REQUEST MODAL (ASHA WORKER) ─────── */}
+      {isMandalReqOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", width: "100%", maxWidth: "520px", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid #e2e8f0", paddingBottom: "0.75rem" }}>
+              <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <Inbox size={20} style={{ color: "#047857" }} />
+                📩 Request Medicine from Mandal HQ (నూతన రిక్వెస్ట్)
+              </div>
+              <button onClick={() => setIsMandalReqOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!freeTextReqForm.medicine_name.trim()) {
+                  showToast("Please enter medicine or supply name", "error");
+                  return;
+                }
+                try {
+                  const res = await createMedicineRequestApi(freeTextReqForm);
+                  showToast(`✓ Medicine Request ${res.request?.request_id || "submitted"} created successfully! Sent to Mandal HQ.`);
+                  setIsMandalReqOpen(false);
+                  setFreeTextReqForm({
+                    medicine_name: "",
+                    requested_quantity: 100,
+                    unit: "Packets",
+                    urgency: "Normal",
+                    reason: "",
+                    notes: "",
+                  });
+                  loadAllData();
+                } catch (err: any) {
+                  showToast(err.message || "Failed to create medicine request", "error");
+                }
+              }}
+              style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}
+            >
+              <div>
+                <label style={{ fontSize: "0.8rem", fontWeight: 800, color: "#334155" }}>
+                  Medicine / Health Supply Name (ఏ మందులైనా నమోదు చేయవచ్చు) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 100 ORS packets, Zinc Tablets, Amoxicillin Syrup"
+                  value={freeTextReqForm.medicine_name}
+                  onChange={(e) => setFreeTextReqForm((prev) => ({ ...prev, medicine_name: e.target.value }))}
+                  style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.85rem", outline: "none", marginTop: "0.2rem" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Quantity *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={freeTextReqForm.requested_quantity}
+                    onChange={(e) => setFreeTextReqForm((prev) => ({ ...prev, requested_quantity: Number(e.target.value) }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Unit *</label>
+                  <select
+                    value={freeTextReqForm.unit}
+                    onChange={(e) => setFreeTextReqForm((prev) => ({ ...prev, unit: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white", marginTop: "0.2rem" }}
+                  >
+                    <option value="Packets">Packets</option>
+                    <option value="Strips">Strips</option>
+                    <option value="Vials">Vials</option>
+                    <option value="Bottles">Bottles</option>
+                    <option value="Kits">Kits</option>
+                    <option value="Boxes">Boxes</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Urgency *</label>
+                  <select
+                    value={freeTextReqForm.urgency}
+                    onChange={(e) => setFreeTextReqForm((prev) => ({ ...prev, urgency: e.target.value as any }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white", marginTop: "0.2rem" }}
+                  >
+                    <option value="Normal">Normal</option>
+                    <option value="High">High</option>
+                    <option value="Urgent">⚡ Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Reason / Requirement *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Diarrhea outbreak in Ward 3 village households"
+                  value={freeTextReqForm.reason}
+                  onChange={(e) => setFreeTextReqForm((prev) => ({ ...prev, reason: e.target.value }))}
+                  style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Additional Notes (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Need immediate supply before monsoon drive"
+                  value={freeTextReqForm.notes}
+                  onChange={(e) => setFreeTextReqForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button type="button" onClick={() => setIsMandalReqOpen(false)} style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#f1f5f9", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "#475569", cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button type="submit" style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#047857", border: "none", fontSize: "0.82rem", fontWeight: 800, color: "white", cursor: "pointer" }}>
+                  Submit Requisition →
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 5: MANDAL DECISION ACTION MODAL (PARTIAL / REJECT) ─────── */}
+      {mandalActionModal.targetReq && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", width: "100%", maxWidth: "480px", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid #e2e8f0", paddingBottom: "0.75rem" }}>
+              <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a" }}>
+                {mandalActionModal.actionType === "PARTIAL" ? "⚡ Partial Approval" : "❌ Reject Request"} — {mandalActionModal.targetReq.request_id}
+              </div>
+              <button onClick={() => setMandalActionModal({ targetReq: null, actionType: null, approvedQty: 0, dispatchedQty: 0, notes: "" })} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const reqId = mandalActionModal.targetReq!.request_id;
+                const act = mandalActionModal.actionType === "PARTIAL" ? "PARTIALLY_APPROVE" : "REJECT";
+                try {
+                  await updateMedicineRequestStatusApi(
+                    reqId,
+                    act,
+                    mandalActionModal.actionType === "PARTIAL" ? mandalActionModal.approvedQty : 0,
+                    0,
+                    mandalActionModal.notes
+                  );
+                  showToast(`✓ Request ${reqId} updated to ${act}`);
+                  setMandalActionModal({ targetReq: null, actionType: null, approvedQty: 0, dispatchedQty: 0, notes: "" });
+                  loadAllData();
+                } catch (err: any) {
+                  showToast(err.message || "Failed to update request", "error");
+                }
+              }}
+              style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}
+            >
+              <div style={{ background: "#f8fafc", padding: "0.75rem", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#0f172a" }}>{mandalActionModal.targetReq.medicine_name}</div>
+                <div style={{ fontSize: "0.72rem", color: "#64748b" }}>Requested: {mandalActionModal.targetReq.requested_quantity} {mandalActionModal.targetReq.unit} by {mandalActionModal.targetReq.asha_worker_name || "Sunita Devi"}</div>
+              </div>
+
+              {mandalActionModal.actionType === "PARTIAL" && (
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 800, color: "#334155" }}>Approved Quantity ({mandalActionModal.targetReq.unit}) *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={mandalActionModal.targetReq.requested_quantity}
+                    value={mandalActionModal.approvedQty}
+                    onChange={(e) => setMandalActionModal((prev) => ({ ...prev, approvedQty: Number(e.target.value) }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 800, color: "#334155" }}>Mandal Remarks / Reason *</label>
+                <input
+                  type="text"
+                  required
+                  value={mandalActionModal.notes}
+                  onChange={(e) => setMandalActionModal((prev) => ({ ...prev, notes: e.target.value }))}
+                  style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button type="button" onClick={() => setMandalActionModal({ targetReq: null, actionType: null, approvedQty: 0, dispatchedQty: 0, notes: "" })} style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#f1f5f9", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "#475569", cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button type="submit" style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: mandalActionModal.actionType === "PARTIAL" ? "#ea580c" : "#dc2626", border: "none", fontSize: "0.82rem", fontWeight: 800, color: "white", cursor: "pointer" }}>
+                  Confirm {mandalActionModal.actionType === "PARTIAL" ? "Partial Approval" : "Rejection"}
                 </button>
               </div>
             </form>
