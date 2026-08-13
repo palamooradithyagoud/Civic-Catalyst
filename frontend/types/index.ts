@@ -1,6 +1,6 @@
 // ── Demo data constants ──────────────────────────────────────────────────────
 
-export type UserRole = "villager" | "panchayat_official";
+export type UserRole = "villager" | "panchayat_official" | "asha_worker";
 
 export interface DemoVillager {
   id: string;
@@ -16,7 +16,15 @@ export interface DemoPanchayat {
   role: "panchayat_official";
 }
 
-export type DemoSession = DemoVillager | DemoPanchayat;
+export interface DemoAshaWorker {
+  id: string;
+  name: string;
+  village: string;
+  role: "asha_worker";
+  phcCenter: string;
+}
+
+export type DemoSession = DemoVillager | DemoPanchayat | DemoAshaWorker;
 
 // ── PanchayatStats ────────────────────────────────────────────────────────────
 

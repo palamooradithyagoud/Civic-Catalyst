@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { setVillagerSession, setPanchayatSession } from "@/services/demoSession";
-import { Users, Building2, ArrowRight, ShieldCheck } from "lucide-react";
+import { setVillagerSession, setPanchayatSession, setAshaSession } from "@/services/demoSession";
+import { Users, Building2, HeartPulse, ArrowRight, ShieldCheck } from "lucide-react";
 
 export function RoleSelector() {
   const router = useRouter();
@@ -17,8 +17,13 @@ export function RoleSelector() {
     router.push("/panchayat/dashboard");
   };
 
+  const handleAsha = () => {
+    setAshaSession();
+    router.push("/asha/dashboard");
+  };
+
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-3">
       {/* Villager Card */}
       <button
         onClick={handleVillager}
@@ -53,6 +58,24 @@ export function RoleSelector() {
           </p>
         </div>
         <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all flex-shrink-0" />
+      </button>
+
+      {/* ASHA Worker Card */}
+      <button
+        onClick={handleAsha}
+        className="role-card group w-full text-left"
+        aria-label="Continue as ASHA Worker"
+      >
+        <div className="role-card-icon bg-teal-50 border border-teal-200">
+          <HeartPulse className="h-7 w-7 text-teal-700" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="role-card-title">Continue as ASHA Worker</p>
+          <p className="role-card-subtitle">
+            Community healthcare, visits & sanitation sync
+          </p>
+        </div>
+        <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-teal-600 group-hover:translate-x-1 transition-all flex-shrink-0" />
       </button>
 
       {/* Demo notice */}

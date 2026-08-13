@@ -5,7 +5,7 @@
  * Phase 2: Replace with real auth tokens / JWT / Supabase session.
  */
 
-import type { DemoSession, DemoVillager, DemoPanchayat } from "@/types";
+import type { DemoSession, DemoVillager, DemoPanchayat, DemoAshaWorker } from "@/types";
 
 const SESSION_KEY = "nivaaran_demo_session";
 
@@ -25,6 +25,14 @@ export const DEMO_PANCHAYAT: DemoPanchayat = {
   role: "panchayat_official",
 };
 
+export const DEMO_ASHA_WORKER: DemoAshaWorker = {
+  id: "demo-asha-001",
+  name: "Sunita Devi (ASHA)",
+  village: "Demo Village",
+  role: "asha_worker",
+  phcCenter: "Demo Primary Health Centre (PHC)",
+};
+
 // ── Session helpers ───────────────────────────────────────────────────────────
 
 export function setVillagerSession(): void {
@@ -35,6 +43,11 @@ export function setVillagerSession(): void {
 export function setPanchayatSession(): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(SESSION_KEY, JSON.stringify(DEMO_PANCHAYAT));
+}
+
+export function setAshaSession(): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SESSION_KEY, JSON.stringify(DEMO_ASHA_WORKER));
 }
 
 export function getSession(): DemoSession | null {
@@ -61,4 +74,10 @@ export function isPanchayatOfficial(
   session: DemoSession | null
 ): session is DemoPanchayat {
   return session?.role === "panchayat_official";
+}
+
+export function isAshaWorker(
+  session: DemoSession | null
+): session is DemoAshaWorker {
+  return session?.role === "asha_worker";
 }
