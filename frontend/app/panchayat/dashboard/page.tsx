@@ -252,7 +252,7 @@ export default function PanchayatDashboard() {
           {NAV_ITEMS.map(({ icon: Icon, label, active, badge }) => (
             <div key={label} className={`sidebar-nav-item${active ? " active" : ""}`}>
               <Icon className="sidebar-nav-icon" />
-              {label}
+              <span className="sidebar-nav-text">{label}</span>
               {badge && <span className="sidebar-nav-badge">{badge}</span>}
             </div>
           ))}
@@ -261,16 +261,16 @@ export default function PanchayatDashboard() {
         {/* Bottom */}
         <div className="sidebar-bottom">
           <button className="sidebar-bottom-item">
-            <Settings style={{ width: 15, height: 15 }} />
-            Settings
+            <Settings style={{ width: 16, height: 16 }} />
+            <span className="sidebar-nav-text">Settings</span>
           </button>
           <button className="sidebar-bottom-item">
-            <HelpCircle style={{ width: 15, height: 15 }} />
-            Support
+            <HelpCircle style={{ width: 16, height: 16 }} />
+            <span className="sidebar-nav-text">Support</span>
           </button>
           <button className="sidebar-bottom-item danger" onClick={handleLogout}>
-            <LogOut style={{ width: 15, height: 15 }} />
-            Log out
+            <LogOut style={{ width: 16, height: 16 }} />
+            <span className="sidebar-nav-text">Log out</span>
           </button>
         </div>
       </aside>
