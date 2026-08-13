@@ -25,8 +25,8 @@ export function RoleSelector() {
         className="role-card group w-full text-left"
         aria-label="Continue as Villager"
       >
-        <div className="role-card-icon bg-saffron-100">
-          <Users className="h-7 w-7 text-saffron-600" />
+        <div className="role-card-icon bg-emerald-100 border border-emerald-200">
+          <Users className="h-7 w-7 text-emerald-900" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="role-card-title">Continue as Villager</p>
@@ -34,7 +34,7 @@ export function RoleSelector() {
             Report civic problems in your village
           </p>
         </div>
-        <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-saffron-500 group-hover:translate-x-1 transition-all flex-shrink-0" />
+        <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all flex-shrink-0" />
       </button>
 
       {/* Panchayat Card */}
@@ -43,8 +43,8 @@ export function RoleSelector() {
         className="role-card group w-full text-left"
         aria-label="Continue as Gram Panchayat"
       >
-        <div className="role-card-icon bg-indigo-100">
-          <Building2 className="h-7 w-7 text-indigo-600" />
+        <div className="role-card-icon bg-emerald-900 border border-emerald-800">
+          <Building2 className="h-7 w-7 text-white" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="role-card-title">Continue as Gram Panchayat</p>
@@ -52,7 +52,7 @@ export function RoleSelector() {
             Manage and resolve village complaints
           </p>
         </div>
-        <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all flex-shrink-0" />
+        <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all flex-shrink-0" />
       </button>
 
       {/* Demo notice */}

@@ -66,7 +66,7 @@ const DEMO_COMPLAINTS = [
     status: "pending" as const,
     category: "Roads",
     date: "Today, 9:15 AM",
-    avatarBg: "#1b4fd8",
+    avatarBg: "#064e3b",
   },
   {
     id: "C-002",
@@ -75,7 +75,7 @@ const DEMO_COMPLAINTS = [
     status: "in_progress" as const,
     category: "Electricity",
     date: "Today, 8:30 AM",
-    avatarBg: "#7c3aed",
+    avatarBg: "#047857",
   },
   {
     id: "C-003",
@@ -84,7 +84,7 @@ const DEMO_COMPLAINTS = [
     status: "pending" as const,
     category: "Water",
     date: "Yesterday, 6:00 PM",
-    avatarBg: "#0891b2",
+    avatarBg: "#059669",
   },
   {
     id: "C-004",
@@ -93,7 +93,7 @@ const DEMO_COMPLAINTS = [
     status: "resolved" as const,
     category: "Sanitation",
     date: "Yesterday, 2:45 PM",
-    avatarBg: "#059669",
+    avatarBg: "#0f5132",
   },
 ];
 
@@ -105,25 +105,25 @@ const ESCALATION_ALERTS = [
     dotClass: "red" as const,
     action: "Escalate",
     icon: Droplets,
-    iconColor: "#60a5fa",
+    iconColor: "#dc2626",
   },
   {
     id: 2,
-    name: "Road Damage",
-    desc: "High traffic risk",
+    name: "Sanitation Task",
+    desc: "Overdue by 1 day",
     dotClass: "yellow" as const,
-    action: "Assign",
-    icon: AlertCircle,
-    iconColor: "#fbbf24",
+    action: "Remind",
+    icon: Trash2,
+    iconColor: "#d97706",
   },
   {
     id: 3,
-    name: "Street Lighting",
-    desc: "In progress · 3h",
+    name: "Street Light Fix",
+    desc: "Assigned today",
     dotClass: "blue" as const,
     action: "View",
     icon: Lightbulb,
-    iconColor: "#a78bfa",
+    iconColor: "#0284c7",
   },
   {
     id: 4,
@@ -132,7 +132,7 @@ const ESCALATION_ALERTS = [
     dotClass: "blue" as const,
     action: "Details",
     icon: Trash2,
-    iconColor: "#34d399",
+    iconColor: "#16a34a",
   },
 ];
 
@@ -142,30 +142,30 @@ const AI_CAPABILITIES = [
     label: "Smart Classification",
     desc: "AI tags by type, urgency and dept.",
     badge: "Live",
-    badgeColor: "#34d399",
-    badgeBg: "rgba(16,185,129,0.1)",
-    iconColor: "#93c5fd",
-    iconBg: "rgba(27,79,216,0.12)",
+    badgeColor: "#047857",
+    badgeBg: "#dcfce7",
+    iconColor: "#047857",
+    iconBg: "#ecfdf5",
   },
   {
     icon: AlertTriangle,
     label: "Priority Routing",
     desc: "Auto-escalation for critical issues.",
     badge: "Live",
-    badgeColor: "#34d399",
-    badgeBg: "rgba(16,185,129,0.1)",
-    iconColor: "#fbbf24",
-    iconBg: "rgba(251,191,36,0.1)",
+    badgeColor: "#047857",
+    badgeBg: "#dcfce7",
+    iconColor: "#d97706",
+    iconBg: "#fffbeb",
   },
   {
     icon: TrendingUp,
     label: "Analytics",
     desc: "Resolution trends and heatmaps.",
     badge: "Phase 2",
-    badgeColor: "#a78bfa",
-    badgeBg: "rgba(124,58,237,0.1)",
-    iconColor: "#a78bfa",
-    iconBg: "rgba(124,58,237,0.1)",
+    badgeColor: "#7c3aed",
+    badgeBg: "#f3e8ff",
+    iconColor: "#7c3aed",
+    iconBg: "#f3e8ff",
   },
 ];
 
@@ -216,7 +216,7 @@ export default function PanchayatDashboard() {
 
   if (loading || !session) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#05111f" }}>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#ffffff" }}>
         <div className="loading-spinner" />
       </div>
     );
@@ -493,32 +493,32 @@ export default function PanchayatDashboard() {
               {/* Quick info card */}
               <div className="glass-card" style={{ padding: "1.125rem" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
-                  <Activity style={{ width: 15, height: 15, color: "#60a5fa" }} />
-                  <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "#e2e8f0" }}>Resolution Rate</span>
+                  <Activity style={{ width: 16, height: 16, color: "#059669" }} />
+                  <span style={{ fontSize: "0.875rem", fontWeight: 800, color: "#042d20" }}>Resolution Rate</span>
                 </div>
                 {[
-                  { label: "Roads", pct: 40, color: "#3b82f6" },
-                  { label: "Water", pct: 0, color: "#0891b2" },
-                  { label: "Electricity", pct: 60, color: "#a78bfa" },
-                  { label: "Sanitation", pct: 100, color: "#34d399" },
+                  { label: "Roads", pct: 40, color: "#2563eb" },
+                  { label: "Water", pct: 0, color: "#0284c7" },
+                  { label: "Electricity", pct: 60, color: "#7c3aed" },
+                  { label: "Sanitation", pct: 100, color: "#16a34a" },
                 ].map(({ label, pct, color }) => (
                   <div key={label} style={{ marginBottom: "0.875rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.3rem" }}>
-                      <span style={{ fontSize: "0.75rem", color: "rgba(148,163,184,0.7)", fontWeight: 500 }}>{label}</span>
-                      <span style={{ fontSize: "0.72rem", color, fontWeight: 700 }}>{pct}%</span>
+                      <span style={{ fontSize: "0.78rem", color: "#334155", fontWeight: 600 }}>{label}</span>
+                      <span style={{ fontSize: "0.75rem", color, fontWeight: 800 }}>{pct}%</span>
                     </div>
-                    <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.06)" }}>
-                      <div style={{ height: "100%", borderRadius: 3, width: `${pct}%`, background: color, transition: "width 1s ease", boxShadow: `0 0 8px ${color}50` }} />
+                    <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9", border: "1px solid #e2e8f0" }}>
+                      <div style={{ height: "100%", borderRadius: 3, width: `${pct}%`, background: color, transition: "width 1s ease", boxShadow: `0 2px 6px ${color}40` }} />
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* System status */}
-              <div className="glass-card" style={{ padding: "1rem" }}>
+              <div className="glass-card" style={{ padding: "1.125rem" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-                  <span style={{ fontSize: "0.8375rem", fontWeight: 700, color: "#e2e8f0" }}>System Status</span>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", display: "inline-block", boxShadow: "0 0 6px #34d399" }} />
+                  <span style={{ fontSize: "0.875rem", fontWeight: 800, color: "#042d20" }}>System Status</span>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a", display: "inline-block", boxShadow: "0 0 8px rgba(22,163,74,0.6)" }} />
                 </div>
                 {[
                   { label: "AI Classification", ok: true },
@@ -526,11 +526,11 @@ export default function PanchayatDashboard() {
                   { label: "Notifications", ok: true },
                   { label: "Live Tracking", ok: false, phase: "Phase 2" },
                 ].map(({ label, ok, phase }) => (
-                  <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <span style={{ fontSize: "0.75rem", color: "rgba(148,163,184,0.65)" }}>{label}</span>
+                  <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid #f1f5f9" }}>
+                    <span style={{ fontSize: "0.78rem", color: "#334155", fontWeight: 600 }}>{label}</span>
                     {ok
-                      ? <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#34d399", background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.18)", borderRadius: "999px", padding: "0.1rem 0.4rem" }}>Operational</span>
-                      : <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#a78bfa", background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.18)", borderRadius: "999px", padding: "0.1rem 0.4rem" }}>{phase}</span>
+                      ? <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#15803d", background: "#dcfce7", border: "1px solid #86efac", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>Operational</span>
+                      : <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#7c3aed", background: "#f3e8ff", border: "1px solid #ddd6fe", borderRadius: "999px", padding: "0.15rem 0.5rem" }}>{phase}</span>
                     }
                   </div>
                 ))}
