@@ -1086,7 +1086,7 @@
 /* Full-screen app shell */
 .panchayat-shell {
   display: flex;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
   background: #05111f;
 }
@@ -1095,7 +1095,7 @@
 .panchayat-sidebar {
   width: 220px;
   min-width: 220px;
-  height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: rgba(255,255,255,0.03);

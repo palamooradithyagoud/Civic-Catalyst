@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -226,11 +226,13 @@ export default function PanchayatDashboard() {
   const displayName = session.name.replace("Demo Gram Panchayat", "").trim() || session.name;
 
   return (
-    <div className="panchayat-shell">
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
+      <div className="india-top-bar" />
+      <div className="panchayat-shell" style={{ height: "calc(100vh - 3px)" }}>
 
-      {/* ── SIDEBAR ───────────────────────────────────────── */}
-      <aside className="panchayat-sidebar">
-        <div className="india-bar-sidebar" />
+        {/* ── SIDEBAR ───────────────────────────────────────── */}
+        <aside className="panchayat-sidebar">
+
 
         {/* Logo */}
         <div className="sidebar-logo">
@@ -600,5 +602,9 @@ export default function PanchayatDashboard() {
         </div>
       </div>
     </div>
+  </div>
   );
 }
+
+
+
