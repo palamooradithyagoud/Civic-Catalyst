@@ -318,20 +318,20 @@ export default function PanchayatDashboard() {
             <div>
               <h1 className="greeting-title" style={{ display: "inline-flex", alignItems: "center" }}>
                 {getHour()}, {displayName.split(" ")[0]}
-                <span className="weather-anim-wrapper" title="Weather Forecast">
-                  <span className="weather-anim-container">
-                    <span className="sun sunshine" />
-                    <span className="sun" />
-                    <span className="cloud back">
+                <div className="weather-widget-box" title="Live Weather">
+                  <div className="container">
+                    <div className="sun sunshine" />
+                    <div className="sun" />
+                    <div className="cloud back">
                       <span className="left-back" />
                       <span className="right-back" />
-                    </span>
-                    <span className="cloud front">
+                    </div>
+                    <div className="cloud front">
                       <span className="left-front" />
                       <span className="right-front" />
-                    </span>
-                  </span>
-                </span>
+                    </div>
+                  </div>
+                </div>
               </h1>
               <div className="greeting-sub">
                 <MapPin style={{ width: 13, height: 13 }} />

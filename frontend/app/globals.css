@@ -2287,53 +2287,55 @@
 
 /* ── Weather Sun & Cloud Animation (Uiverse.io zanina-yassine reference) ── */
 
-.weather-anim-wrapper {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
+.weather-widget-box {
+  display: inline-block;
+  width: 48px;
+  height: 48px;
   position: relative;
   vertical-align: middle;
-  overflow: hidden;
-  margin-left: 0.35rem;
+  margin-left: 0.5rem;
+  overflow: visible;
   flex-shrink: 0;
 }
 
-.weather-anim-container {
+.weather-widget-box .container {
   width: 250px;
   height: 250px;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) scale(0.18);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  transform-origin: center center;
   pointer-events: none;
 }
 
-.weather-anim-container .cloud {
+.weather-widget-box .cloud {
   width: 250px;
 }
 
-.weather-anim-container .front {
+.weather-widget-box .front {
   padding-top: 45px;
   margin-left: 25px;
-  display: inline;
+  display: inline-block;
   position: absolute;
   z-index: 11;
-  animation: clouds 8s ease-in-out infinite;
+  animation: clouds 8s infinite ease-in-out !important;
 }
 
-.weather-anim-container .back {
+.weather-widget-box .back {
   margin-top: -30px;
   margin-left: 150px;
   z-index: 12;
-  animation: clouds 12s ease-in-out infinite;
+  position: absolute;
+  display: inline-block;
+  animation: clouds 12s infinite ease-in-out !important;
 }
 
-.weather-anim-container .right-front {
+.weather-widget-box .right-front {
   width: 45px;
   height: 45px;
   border-radius: 50% 50% 50% 0%;
@@ -2343,7 +2345,7 @@
   z-index: 5;
 }
 
-.weather-anim-container .left-front {
+.weather-widget-box .left-front {
   width: 65px;
   height: 65px;
   border-radius: 50% 50% 0% 50%;
@@ -2352,7 +2354,7 @@
   z-index: 5;
 }
 
-.weather-anim-container .right-back {
+.weather-widget-box .right-back {
   width: 50px;
   height: 50px;
   border-radius: 50% 50% 50% 0%;
@@ -2362,7 +2364,7 @@
   z-index: 5;
 }
 
-.weather-anim-container .left-back {
+.weather-widget-box .left-back {
   width: 30px;
   height: 30px;
   border-radius: 50% 50% 0% 50%;
@@ -2371,17 +2373,18 @@
   z-index: 5;
 }
 
-.weather-anim-container .sun {
+.weather-widget-box .sun {
   width: 120px;
   height: 120px;
+  background: -webkit-linear-gradient(to right, #fcbb04, #fffc00);
   background: linear-gradient(to right, #fcbb04, #fffc00);
   border-radius: 60px;
-  display: inline;
+  display: inline-block;
   position: absolute;
 }
 
-.weather-anim-container .sunshine {
-  animation: sunshines 2s infinite;
+.weather-widget-box .sunshine {
+  animation: sunshines 2s infinite ease-in-out !important;
 }
 
 @keyframes sunshines {
@@ -2397,12 +2400,12 @@
 
 @keyframes clouds {
   0% {
-    transform: translateX(15px);
+    transform: translateX(30px);
   }
   50% {
-    transform: translateX(0px);
+    transform: translateX(-30px);
   }
   100% {
-    transform: translateX(15px);
+    transform: translateX(30px);
   }
 }
