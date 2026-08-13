@@ -1086,8 +1086,8 @@
 
 /* ── Sidebar ─────────────────────────────────────────────── */
 .panchayat-sidebar {
-  width: 235px;
-  min-width: 235px;
+  width: 260px;
+  min-width: 260px;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -1107,7 +1107,8 @@
   background: linear-gradient(180deg, transparent, rgba(6,78,59,0.08) 30%, rgba(6,78,59,0.04) 70%, transparent);
 }
 
-.sidebar-logo {
+.sidebar-logo,
+.sidebar-brand {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -1125,7 +1126,8 @@
   flex-shrink: 0;
 }
 
-.sidebar-logo-name {
+.sidebar-logo-name,
+.sidebar-logo-text {
   font-size: 0.95rem;
   font-weight: 800;
   color: #042d20;
@@ -1169,7 +1171,7 @@
   gap: 0.75rem;
   padding: 0.65rem 0.875rem 0.65rem 1.6rem;
   border-radius: 10px;
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: #0f172a;
   cursor: pointer;
@@ -1180,6 +1182,7 @@
   overflow: hidden;
   z-index: 1;
   background: transparent;
+  white-space: nowrap;
 }
 
 .sidebar-nav-text,
@@ -1192,9 +1195,10 @@
 }
 
 .sidebar-nav-text {
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: #0f172a;
+  white-space: nowrap;
 }
 
 /* Base rotated diamond indicator before hover */

@@ -143,12 +143,12 @@ export default function AshaDashboardPage() {
       {/* ── SIDEBAR ──────────────────────────────────────────── */}
       <aside className="panchayat-sidebar">
         {/* Brand Header */}
-        <div className="sidebar-brand">
+        <div className="sidebar-logo">
           <div className="sidebar-logo-icon">
             <HeartPulse style={{ width: 18, height: 18, color: "#ffffff" }} />
           </div>
           <div>
-            <div className="sidebar-logo-text">Nivaaran AI</div>
+            <div className="sidebar-logo-name">Nivaaran AI</div>
             <div className="sidebar-logo-version">ASHA Portal · v1.0</div>
           </div>
         </div>
