@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS public.distribution_records (
     transaction_id INTEGER REFERENCES public.inventory_transactions(id) ON DELETE CASCADE,
     item_id INTEGER REFERENCES public.inventory_items(id) ON DELETE CASCADE,
     item_name VARCHAR(255) NOT NULL,
+    unit VARCHAR(50) DEFAULT 'Units',          -- e.g. Strips, Kits, Vials
     quantity INTEGER NOT NULL,
     beneficiary_ref VARCHAR(255) NOT NULL,
     area_village VARCHAR(255) NOT NULL, -- Ward 1, Ward 2, Ward 3, Ward 4
@@ -189,3 +190,8 @@ INSERT INTO public.complaints
 ('C-002', 'Water supply disruption in Ward 2', 'Burst main pipeline causing clean water leak and low pressure across residential houses.', 'Water Supply', 'Ward 2 Residential Area', 'High', 'in_progress', 'Suresh Reddy', 'vil_002', 'Shyampet', true, 'Yesterday, 6:00 PM'),
 ('C-003', 'Garbage clearance near primary school', 'Unsegregated garbage accumulation creating unhygienic conditions near school entrance.', 'Sanitation', 'Primary School Lane', 'Medium', 'resolved', 'Meena Patel', 'vil_003', 'Shyampet', false, '12 Aug, 2:45 PM')
 ON CONFLICT (complaint_id_code) DO NOTHING;
+
+-- ── 11. Schema Migration Patch (run on existing deployments) ─────────────────
+-- If distribution_records table already exists without the 'unit' column, add it:
+ALTER TABLE public.distribution_records
+    ADD COLUMN IF NOT EXISTS unit VARCHAR(50) DEFAULT 'Units';

@@ -1,8 +1,6 @@
-/**
- * Civic Complaints, AI Vision Analysis & Real-Time Sync Service
- */
+import { supabase } from "@/lib/supabaseClient";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
+const AI_BASE_URL = process.env.NEXT_PUBLIC_API_URL
   ? process.env.NEXT_PUBLIC_API_URL.replace(/\/inventory$/, "/complaints")
   : "http://127.0.0.1:8000/api/complaints";
 
@@ -57,8 +55,41 @@ export interface GeocodeResult {
   district?: string;
 }
 
+// ── Internal helper ───────────────────────────────────────────────────────────
+
+function mapRow(c: any): Complaint {
+  const status = c.status as "pending" | "in_progress" | "resolved";
+  const avatarBg =
+    status === "resolved"
+      ? "#0f5132"
+      : status === "in_progress"
+      ? "#059669"
+      : "#064e3b";
+  return {
+    id: c.complaint_id_code || String(c.id),
+    complaint_id_code: c.complaint_id_code || String(c.id),
+    title: c.title,
+    description: c.description || "",
+    category: c.category,
+    location: c.location,
+    urgency: c.urgency,
+    status,
+    villager_name: c.villager_name,
+    villager_id: c.villager_id,
+    village: c.village,
+    imageUrl: c.image_url || c.imageUrl,
+    image_url: c.image_url,
+    aiGenerated: c.ai_generated !== undefined ? c.ai_generated : c.aiGenerated,
+    date: c.date_label || c.date || "Today",
+    date_label: c.date_label,
+    avatarBg,
+    created_at: c.created_at,
+    updated_at: c.updated_at,
+  };
+}
+
 /**
- * Fetch complaints list with optional filtering
+ * Fetch complaints list directly from Supabase.
  */
 export async function fetchComplaintsApi(params?: {
   village?: string;
@@ -66,183 +97,165 @@ export async function fetchComplaintsApi(params?: {
   category?: string;
   search?: string;
 }): Promise<Complaint[]> {
-  try {
-    const query = new URLSearchParams();
-    if (params?.village) query.append("village", params.village);
-    if (params?.status) query.append("status", params.status);
-    if (params?.category) query.append("category", params.category);
-    if (params?.search) query.append("search", params.search);
+  let query = supabase
+    .from("complaints")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-    const url = `${API_BASE_URL}${query.toString() ? `?${query.toString()}` : ""}`;
-    const res = await fetch(url, { cache: "no-store" });
-    if (res.ok) {
-      const data = await res.json();
-      return data.map((c: any) => ({
-        ...c,
-        imageUrl: c.image_url || c.imageUrl,
-        aiGenerated: c.ai_generated !== undefined ? c.ai_generated : c.aiGenerated,
-      }));
-    }
-  } catch (err) {
-    console.warn("Backend complaints service offline, using local store.", err);
+  if (params?.village && params.village !== "ALL") {
+    query = query.eq("village", params.village);
+  }
+  if (params?.status && params.status !== "ALL") {
+    query = query.eq("status", params.status);
+  }
+  if (params?.category && params.category !== "ALL") {
+    query = query.eq("category", params.category);
   }
 
-  // Fallback to local storage if offline
-  if (typeof window !== "undefined") {
-    const local = localStorage.getItem("civic_complaints_cache");
-    if (local) {
-      try {
-        return JSON.parse(local);
-      } catch {}
-    }
+  const { data, error } = await query;
+  if (error) throw new Error(`Supabase fetch complaints error: ${error.message}`);
+
+  let results = (data || []).map(mapRow);
+
+  // Client-side search (Supabase free tier lacks full-text search)
+  if (params?.search) {
+    const s = params.search.toLowerCase();
+    results = results.filter(
+      (c) =>
+        (c.title || "").toLowerCase().includes(s) ||
+        (c.description || "").toLowerCase().includes(s) ||
+        (c.location || "").toLowerCase().includes(s) ||
+        (c.villager_name || "").toLowerCase().includes(s)
+    );
   }
-  return [];
+
+  return results;
 }
 
 /**
- * Submit a new civic complaint from Citizen Dashboard
+ * Submit a new civic complaint to Supabase.
  */
-export async function createComplaintApi(complaintData: Partial<Complaint>): Promise<Complaint> {
+export async function createComplaintApi(
+  complaintData: Partial<Complaint>
+): Promise<Complaint> {
+  // Generate a unique complaint_id_code
+  const { data: lastRow } = await supabase
+    .from("complaints")
+    .select("id")
+    .order("id", { ascending: false })
+    .limit(1);
+  const nextNum = lastRow && lastRow[0] ? lastRow[0].id + 1 : 1;
+  const compId =
+    complaintData.id || complaintData.complaint_id_code || `C-${String(nextNum).padStart(3, "0")}`;
+
+  const dateLabel =
+    complaintData.date ||
+    "Today, " +
+      new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
   const payload = {
+    complaint_id_code: compId,
     title: complaintData.title,
     description: complaintData.description || "",
     category: complaintData.category || "Roads & Infrastructure",
     location: complaintData.location || "Ward 1",
     urgency: complaintData.urgency || "High",
+    status: "pending",
     villager_name: complaintData.villager_name || "Citizen",
     villager_id: complaintData.villager_id || "vil_001",
     village: complaintData.village || "Shyampet",
     image_url: complaintData.imageUrl || complaintData.image_url || null,
     ai_generated: Boolean(complaintData.aiGenerated || complaintData.ai_generated),
-    date: complaintData.date || "Today, " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-  };
-
-  try {
-    const res = await fetch(`${API_BASE_URL}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (res.ok) {
-      const resData = await res.json();
-      const saved = resData.complaint || resData;
-      return {
-        ...saved,
-        imageUrl: saved.image_url || saved.imageUrl,
-        aiGenerated: saved.ai_generated !== undefined ? saved.ai_generated : saved.aiGenerated,
-      };
-    }
-  } catch (err) {
-    console.warn("Backend unavailable, storing complaint locally.", err);
-  }
-
-  // Local fallback object
-  const fallback: Complaint = {
-    id: `C-${Date.now().toString().slice(-4)}`,
-    title: payload.title || "Civic Issue",
-    description: payload.description,
-    category: payload.category,
-    location: payload.location,
-    urgency: payload.urgency,
-    status: "pending",
-    villager_name: payload.villager_name,
-    villager_id: payload.villager_id,
-    village: payload.village,
-    imageUrl: payload.image_url || undefined,
-    aiGenerated: payload.ai_generated,
-    date: payload.date,
-    avatarBg: "#064e3b",
+    date_label: dateLabel,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 
-  if (typeof window !== "undefined") {
-    const existing = localStorage.getItem("civic_complaints_cache");
-    const list = existing ? JSON.parse(existing) : [];
-    list.unshift(fallback);
-    localStorage.setItem("civic_complaints_cache", JSON.stringify(list));
-  }
+  const { data, error } = await supabase
+    .from("complaints")
+    .insert([payload])
+    .select();
 
-  return fallback;
+  if (error) throw new Error(`Supabase create complaint error: ${error.message}`);
+  if (!data || !data[0]) throw new Error("No data returned from Supabase insert");
+
+  return mapRow(data[0]);
 }
 
 /**
- * Update complaint resolution status (pending, in_progress, resolved)
+ * Update complaint resolution status in Supabase.
  */
 export async function updateComplaintStatusApi(
   complaintId: string,
   newStatus: "pending" | "in_progress" | "resolved"
 ): Promise<Complaint | null> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/${complaintId}/status`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    });
+  const { data, error } = await supabase
+    .from("complaints")
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .eq("complaint_id_code", complaintId)
+    .select();
 
-    if (res.ok) {
-      const data = await res.json();
-      const c = data.complaint || data;
-      return {
-        ...c,
-        imageUrl: c.image_url || c.imageUrl,
-        aiGenerated: c.ai_generated !== undefined ? c.ai_generated : c.aiGenerated,
-      };
-    }
-  } catch (err) {
-    console.warn("Backend update failed, updating local cache.", err);
-  }
+  if (error) throw new Error(`Supabase update complaint error: ${error.message}`);
+  if (!data || !data[0]) return null;
 
-  if (typeof window !== "undefined") {
-    const existing = localStorage.getItem("civic_complaints_cache");
-    if (existing) {
-      try {
-        const list: Complaint[] = JSON.parse(existing);
-        const item = list.find((x) => x.id === complaintId);
-        if (item) {
-          item.status = newStatus;
-          localStorage.setItem("civic_complaints_cache", JSON.stringify(list));
-          return item;
-        }
-      } catch {}
-    }
-  }
-  return null;
+  return mapRow(data[0]);
 }
 
 /**
- * Fetch KPI counts for Gram Panchayat Dashboard
+ * Fetch KPI counts for Gram Panchayat Dashboard directly from Supabase.
  */
 export async function fetchComplaintKPIsApi(): Promise<ComplaintKPIs> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/stats`, { cache: "no-store" });
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (err) {
-    console.warn("KPI stats fallback", err);
+  const { data, error } = await supabase.from("complaints").select("*");
+  if (error) {
+    console.error("Supabase KPI fetch error:", error.message);
+    return {
+      total: 0,
+      pending: 0,
+      in_progress: 0,
+      resolved: 0,
+      high_urgency: 0,
+      resolution_rate: "0%",
+      category_breakdown: {},
+    };
+  }
+
+  const list = data || [];
+  const total = list.length;
+  const pending = list.filter((c) => c.status === "pending").length;
+  const in_progress = list.filter((c) => c.status === "in_progress").length;
+  const resolved = list.filter((c) => c.status === "resolved").length;
+  const high_urgency = list.filter(
+    (c) => c.urgency === "High" && c.status !== "resolved"
+  ).length;
+
+  const category_breakdown: Record<string, number> = {};
+  for (const c of list) {
+    const cat = c.category || "Other";
+    category_breakdown[cat] = (category_breakdown[cat] || 0) + 1;
   }
 
   return {
-    total: 0,
-    pending: 0,
-    in_progress: 0,
-    resolved: 0,
-    high_urgency: 0,
-    resolution_rate: "0%",
-    category_breakdown: {},
+    total,
+    pending,
+    in_progress,
+    resolved,
+    high_urgency,
+    resolution_rate:
+      total > 0 ? `${((resolved / total) * 100).toFixed(1)}%` : "0%",
+    category_breakdown,
   };
 }
 
 /**
- * Send issue image to AI Vision analysis endpoint (or fallback to client-side neural heuristics)
+ * Send issue image to AI Vision analysis endpoint (FastAPI backend).
+ * Falls back to client-side heuristics if backend is offline.
  */
 export async function analyzeIssueImage(
   file: File,
   base64Data?: string
 ): Promise<AIAnalysisResult> {
   try {
-    const res = await fetch(`${API_BASE_URL}/analyze-image`, {
+    const res = await fetch(`${AI_BASE_URL}/analyze-image`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -250,16 +263,12 @@ export async function analyzeIssueImage(
         image_base64: base64Data || null,
       }),
     });
-
-    if (res.ok) {
-      const data = await res.json();
-      return data;
-    }
+    if (res.ok) return await res.json();
   } catch (err) {
-    console.warn("Backend AI Vision service offline, utilizing local AI Vision engine fallback.", err);
+    console.warn("Backend AI Vision service offline, using local fallback.", err);
   }
 
-  // Resilient Client-Side AI Vision engine fallback
+  // Client-side AI Vision engine fallback
   const fn = file.name.toLowerCase();
   let category = "Roads & Infrastructure";
   let title = "Severe Road Pothole & Damaged Pavement";
@@ -305,22 +314,20 @@ export async function analyzeIssueImage(
 }
 
 /**
- * Reverse Geocode GPS coordinates into human readable village address
+ * Reverse Geocode GPS coordinates into human readable village address.
+ * Uses FastAPI backend; falls back to client GPS formatter if offline.
  */
 export async function reverseGeocodeLocation(
   latitude: number,
   longitude: number
 ): Promise<GeocodeResult> {
   try {
-    const res = await fetch(`${API_BASE_URL}/reverse-geocode`, {
+    const res = await fetch(`${AI_BASE_URL}/reverse-geocode`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ latitude, longitude }),
     });
-
-    if (res.ok) {
-      return await res.json();
-    }
+    if (res.ok) return await res.json();
   } catch (err) {
     console.warn("Backend geocoding offline, using client GPS formatter.", err);
   }

@@ -61,57 +61,10 @@ import {
 import { fetchLiveGpsWeather, type WeatherData } from "@/services/weatherApi";
 import { translations, type Language } from "@/lib/translations";
 
-// ── Demo Data ────────────────────────────────────────────────────────────────
-
-const INITIAL_COMPLAINTS: Complaint[] = [
-  {
-    id: "C-001",
-    title: "Broken road near main market",
-    description: "Deep pothole and asphalt damage obstructing traffic near central market entrance.",
-    status: "pending",
-    category: "Roads & Infrastructure",
-    date: "Today, 9:15 AM",
-    location: "Market Road, Ward 4",
-    avatarBg: "#064e3b",
-    urgency: "High",
-    villager_name: "Ramesh Kumar",
-    aiGenerated: true,
-    imageUrl: undefined,
-  },
-  {
-    id: "C-002",
-    title: "Water supply disruption in Ward 2",
-    description: "Burst main pipeline causing clean water leak and low pressure across Ward 2 residential houses.",
-    status: "in_progress",
-    category: "Water Supply",
-    date: "Yesterday, 6:00 PM",
-    location: "Ward 2 Residential Area",
-    avatarBg: "#059669",
-    urgency: "High",
-    villager_name: "Suresh Reddy",
-    aiGenerated: true,
-    imageUrl: undefined,
-  },
-  {
-    id: "C-003",
-    title: "Garbage clearance near primary school",
-    description: "Unsegregated garbage accumulation creating unhygienic conditions near school entrance.",
-    status: "resolved",
-    category: "Sanitation",
-    date: "12 Aug, 2:45 PM",
-    location: "Primary School Lane",
-    avatarBg: "#0f5132",
-    urgency: "Medium",
-    villager_name: "Meena Patel",
-    aiGenerated: false,
-    imageUrl: undefined,
-  },
-];
-
 const NAV_ITEMS = [
   { id: "home", label: "Dashboard", icon: LayoutDashboard, badge: null },
-  { id: "complaints", label: "Complaints", icon: ClipboardList, badge: "3" },
-  { id: "weather", label: "Weather", icon: CloudSun, badge: "32°" },
+  { id: "complaints", label: "Complaints", icon: ClipboardList, badge: null },
+  { id: "weather", label: "Weather", icon: CloudSun, badge: "Live" },
   { id: "market", label: "Market Prices", icon: TrendingUp, badge: "Live" },
   { id: "news", label: "Local News", icon: FileText, badge: "New" },
 ];
@@ -160,7 +113,7 @@ export default function CitizenDashboard() {
   const [session, setSession] = useState<DemoVillager | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState("home");
-  const [complaints, setComplaints] = useState<Complaint[]>(INITIAL_COMPLAINTS);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [submittingComplaint, setSubmittingComplaint] = useState(false);
 
   // New Complaint Modal State
@@ -289,9 +242,7 @@ export default function CitizenDashboard() {
   const loadLiveComplaints = async () => {
     try {
       const data = await fetchComplaintsApi();
-      if (data && data.length > 0) {
-        setComplaints(data);
-      }
+      setComplaints(data || []);
     } catch (err) {
       console.warn("Could not load live complaints:", err);
     }
@@ -410,6 +361,7 @@ export default function CitizenDashboard() {
       setComplaints((prev) => [created, ...prev.filter((x) => x.id !== created.id)]);
       resetFormState();
       setModalOpen(false);
+      setCurrentTab("complaints");
     } catch (err) {
       console.error("Failed to create complaint", err);
     } finally {
@@ -701,45 +653,59 @@ export default function CitizenDashboard() {
                 </div>
 
                 <div className="complaints-card" style={{ border: "1px solid #e2e8f0" }}>
-                  {complaints.map((c) => (
-                    <div key={c.id} className="complaint-item" style={{ padding: "1rem 1.25rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-                      {c.imageUrl ? (
-                        <img src={c.imageUrl} alt={c.title} style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: "1px solid #a7f3d0", flexShrink: 0 }} />
-                      ) : (
-                        <div className="complaint-avatar" style={{ background: c.avatarBg, width: 48, height: 48, borderRadius: 12, fontSize: "0.85rem", flexShrink: 0 }}>
-                          {c.id}
+                  {complaints.length === 0 ? (
+                    <div style={{ padding: "3rem 1.5rem", textAlign: "center", color: "#64748b" }}>
+                      <CheckCircle2 size={36} style={{ color: "#16a34a", margin: "0 auto 0.75rem" }} />
+                      <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>No civic complaints reported yet</div>
+                      <div style={{ fontSize: "0.8rem", marginTop: "0.25rem", marginBottom: "1rem" }}>
+                        Have an issue in your village? Use the button below to report it to Gram Panchayat.
+                      </div>
+                      <button className="add-report-btn" style={{ margin: "0 auto" }} onClick={() => setModalOpen(true)}>
+                        <Plus style={{ width: 15, height: 15 }} />
+                        {t("btnReportIssue")}
+                      </button>
+                    </div>
+                  ) : (
+                    complaints.map((c) => (
+                      <div key={c.id} className="complaint-item" style={{ padding: "1rem 1.25rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
+                        {c.imageUrl ? (
+                          <img src={c.imageUrl} alt={c.title} style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: "1px solid #a7f3d0", flexShrink: 0 }} />
+                        ) : (
+                          <div className="complaint-avatar" style={{ background: c.avatarBg || "#064e3b", width: 48, height: 48, borderRadius: 12, fontSize: "0.85rem", flexShrink: 0 }}>
+                            {c.id}
+                          </div>
+                        )}
+                        <div className="complaint-info" style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.2rem" }}>
+                            <span className="complaint-title" style={{ fontSize: "0.95rem", fontWeight: 800 }}>{c.title}</span>
+                            {c.aiGenerated && (
+                              <span style={{ fontSize: "0.65rem", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", padding: "0.1rem 0.4rem", borderRadius: 999, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.15rem" }}>
+                                <Sparkles style={{ width: 9, height: 9 }} /> AI Auto-Written
+                              </span>
+                            )}
+                          </div>
+                          {c.description && (
+                            <div style={{ fontSize: "0.78rem", color: "#475569", marginBottom: "0.35rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                              {c.description}
+                            </div>
+                          )}
+                          <div className="complaint-name" style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                            📍 {c.location} · <span style={{ color: "#059669", fontWeight: 600 }}>{c.category}</span> · {c.date}
+                          </div>
                         </div>
-                      )}
-                      <div className="complaint-info" style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.2rem" }}>
-                          <span className="complaint-title" style={{ fontSize: "0.95rem", fontWeight: 800 }}>{c.title}</span>
-                          {c.aiGenerated && (
-                            <span style={{ fontSize: "0.65rem", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", padding: "0.1rem 0.4rem", borderRadius: 999, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.15rem" }}>
-                              <Sparkles style={{ width: 9, height: 9 }} /> AI Auto-Written
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35rem" }}>
+                          <span className={`complaint-status ${c.status}`} style={{ padding: "0.35rem 0.85rem", fontSize: "0.78rem" }}>
+                            {c.status === "in_progress" ? "In Progress" : c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                          </span>
+                          {c.urgency && (
+                            <span style={{ fontSize: "0.68rem", fontWeight: 700, color: c.urgency === "High" ? "#dc2626" : c.urgency === "Medium" ? "#d97706" : "#16a34a", background: c.urgency === "High" ? "#fef2f2" : c.urgency === "Medium" ? "#fffbeb" : "#f0fdf4", padding: "0.15rem 0.5rem", borderRadius: 6, border: `1px solid ${c.urgency === "High" ? "#fca5a5" : c.urgency === "Medium" ? "#fde68a" : "#86efac"}` }}>
+                              {c.urgency} Urgency
                             </span>
                           )}
                         </div>
-                        {c.description && (
-                          <div style={{ fontSize: "0.78rem", color: "#475569", marginBottom: "0.35rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                            {c.description}
-                          </div>
-                        )}
-                        <div className="complaint-name" style={{ fontSize: "0.78rem", color: "#64748b" }}>
-                          📍 {c.location} · <span style={{ color: "#059669", fontWeight: 600 }}>{c.category}</span> · {c.date}
-                        </div>
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35rem" }}>
-                        <span className={`complaint-status ${c.status}`} style={{ padding: "0.35rem 0.85rem", fontSize: "0.78rem" }}>
-                          {c.status === "in_progress" ? "In Progress" : c.status.charAt(0).toUpperCase() + c.status.slice(1)}
-                        </span>
-                        {c.urgency && (
-                          <span style={{ fontSize: "0.68rem", fontWeight: 700, color: c.urgency === "High" ? "#dc2626" : c.urgency === "Medium" ? "#d97706" : "#16a34a", background: c.urgency === "High" ? "#fef2f2" : c.urgency === "Medium" ? "#fffbeb" : "#f0fdf4", padding: "0.15rem 0.5rem", borderRadius: 6, border: `1px solid ${c.urgency === "High" ? "#fca5a5" : c.urgency === "Medium" ? "#fde68a" : "#86efac"}` }}>
-                            {c.urgency} Urgency
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
