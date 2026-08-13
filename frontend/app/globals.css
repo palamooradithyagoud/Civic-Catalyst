@@ -1,0 +1,226 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── Nivaaran AI Design Tokens ──────────────────────────────────────────────── */
+
+@theme inline {
+  /* Fonts */
+  --font-sans: var(--font-noto-sans), system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
+
+  /* shadcn color mappings */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+
+  /* Nivaaran custom palette */
+  --color-indigo-50: #eef2ff;
+  --color-indigo-100: #e0e7ff;
+  --color-indigo-200: #c7d2fe;
+  --color-indigo-500: #6366f1;
+  --color-indigo-600: #1e40af;
+  --color-indigo-700: #1e3a8a;
+  --color-indigo-900: #1e1b4b;
+
+  --color-saffron-50: #fff7ed;
+  --color-saffron-100: #ffedd5;
+  --color-saffron-200: #fed7aa;
+  --color-saffron-500: #f97316;
+  --color-saffron-600: #ea580c;
+  --color-saffron-700: #c2410c;
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.295 0.18 264);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ── Component Classes ───────────────────────────────────────────────────────── */
+
+@layer components {
+
+  /* ── Role Selector Cards ──────────────────────────────────────────────────── */
+  .role-card {
+    @apply flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-200
+           shadow-sm hover:shadow-md hover:border-indigo-300 transition-all duration-200
+           active:scale-[0.98] min-h-[72px] cursor-pointer;
+  }
+
+  .role-card-icon {
+    @apply h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0;
+  }
+
+  .role-card-title {
+    @apply font-semibold text-slate-900 text-base leading-snug;
+  }
+
+  .role-card-subtitle {
+    @apply text-sm text-slate-500 mt-0.5 leading-snug;
+  }
+
+  /* ── Dashboard Cards ──────────────────────────────────────────────────────── */
+  .section-card {
+    @apply bg-white rounded-2xl border border-slate-200 shadow-sm p-5;
+  }
+
+  .section-title {
+    @apply text-base font-semibold text-slate-900;
+  }
+
+  /* ── Stat Cards ───────────────────────────────────────────────────────────── */
+  .stat-card {
+    @apply bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3;
+  }
+
+  .stat-card-icon {
+    @apply h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0;
+  }
+
+  .stat-card-value {
+    @apply text-2xl font-bold text-slate-900 leading-none;
+  }
+
+  .stat-card-label {
+    @apply text-xs text-slate-500 mt-1;
+  }
+
+  /* ── Empty State ──────────────────────────────────────────────────────────── */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-10 px-4 text-center;
+  }
+
+  .empty-state-icon {
+    @apply h-14 w-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-4;
+  }
+
+  .empty-state-title {
+    @apply text-sm font-semibold text-slate-700 mb-1;
+  }
+
+  .empty-state-desc {
+    @apply text-sm text-slate-500 max-w-xs leading-relaxed;
+  }
+
+  /* ── Welcome Banner ───────────────────────────────────────────────────────── */
+  .welcome-banner {
+    @apply rounded-2xl p-5 border;
+  }
+
+  .welcome-banner.saffron {
+    @apply bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200;
+  }
+
+  .welcome-banner.indigo {
+    @apply bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-200;
+  }
+
+  /* ── Primary Button ───────────────────────────────────────────────────────── */
+  .primary-btn {
+    @apply flex items-center justify-center gap-2 bg-indigo-700 hover:bg-indigo-800
+           text-white font-semibold text-base rounded-xl px-5 py-3.5 transition-all
+           duration-150 active:scale-[0.98] shadow-sm min-h-[52px] cursor-pointer;
+  }
+
+  .primary-btn-saffron {
+    @apply flex items-center justify-center gap-2 bg-saffron-600 hover:bg-saffron-700
+           text-white font-semibold text-base rounded-xl px-5 py-3.5 transition-all
+           duration-150 active:scale-[0.98] shadow-sm min-h-[52px] cursor-pointer;
+  }
+
+  /* ── Loading Spinner ──────────────────────────────────────────────────────── */
+  .loading-spinner {
+    @apply h-8 w-8 rounded-full border-4 border-slate-200 border-t-indigo-600
+           animate-spin;
+  }
+}
+
+/* ── Custom Colors (Tailwind v4 theme extensions) ────────────────────────────── */
+
+@theme {
+  --color-saffron-50: #fff7ed;
+  --color-saffron-100: #ffedd5;
+  --color-saffron-200: #fed7aa;
+  --color-saffron-500: #f97316;
+  --color-saffron-600: #ea580c;
+  --color-saffron-700: #c2410c;
+}
