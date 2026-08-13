@@ -2,27 +2,161 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSession, isVillager, clearSession } from "@/services/demoSession";
-import { DemoVillager } from "@/types";
 import {
-  Home as HomeIcon,
-  AlertCircle,
+  getSession,
+  isVillager,
+  clearSession,
+} from "@/services/demoSession";
+import type { DemoVillager } from "@/types";
+import IndianNationalEmblem from "@/components/IndianNationalEmblem";
+import {
+  LayoutDashboard,
+  ClipboardList,
   CloudSun,
   TrendingUp,
   FileText,
   LogOut,
-  Menu,
+  Settings,
+  HelpCircle,
+  MessageSquare,
+  Bell,
+  ChevronDown,
+  Plus,
+  Shield,
+  AlertCircle,
   X,
+  Send,
   Sparkles,
-  Leaf,
+  ArrowRight,
+  Camera,
+  UploadCloud,
+  MapPin,
+  Loader2,
+  CheckCircle2,
+  RefreshCw,
+  AlertTriangle,
+  Trash2,
+  Image as ImageIcon,
+  Zap,
 } from "lucide-react";
+import { analyzeIssueImage, reverseGeocodeLocation } from "@/services/complaintsApi";
+
+// ── Demo Data ────────────────────────────────────────────────────────────────
+
+const INITIAL_COMPLAINTS = [
+  {
+    id: "C-001",
+    title: "Broken road near main market",
+    description: "Deep pothole and asphalt damage obstructing traffic near central market entrance.",
+    status: "pending" as const,
+    category: "Roads & Infrastructure",
+    date: "Today, 9:15 AM",
+    location: "Market Road, Ward 4",
+    avatarBg: "#064e3b",
+    urgency: "High",
+    aiGenerated: true,
+    imageUrl: undefined as string | undefined,
+  },
+  {
+    id: "C-002",
+    title: "Water supply disruption in Ward 2",
+    description: "Burst main pipeline causing clean water leak and low pressure across Ward 2 residential houses.",
+    status: "in_progress" as const,
+    category: "Water Supply",
+    date: "Yesterday, 6:00 PM",
+    location: "Ward 2 Residential Area",
+    avatarBg: "#059669",
+    urgency: "High",
+    aiGenerated: true,
+    imageUrl: undefined as string | undefined,
+  },
+  {
+    id: "C-003",
+    title: "Garbage clearance near primary school",
+    description: "Unsegregated garbage accumulation creating unhygienic conditions near school entrance.",
+    status: "resolved" as const,
+    category: "Sanitation",
+    date: "12 Aug, 2:45 PM",
+    location: "Primary School Lane",
+    avatarBg: "#0f5132",
+    urgency: "Medium",
+    aiGenerated: false,
+    imageUrl: undefined as string | undefined,
+  },
+];
+
+const NAV_ITEMS = [
+  { id: "home", label: "Dashboard", icon: LayoutDashboard, badge: null },
+  { id: "complaints", label: "Complaints", icon: ClipboardList, badge: "3" },
+  { id: "weather", label: "Weather", icon: CloudSun, badge: "32°" },
+  { id: "market", label: "Market Prices", icon: TrendingUp, badge: "Live" },
+  { id: "news", label: "Local News", icon: FileText, badge: "New" },
+];
+
+const FEATURE_BOXES = [
+  {
+    id: "complaints",
+    title: "Civic Complaints",
+    desc: "Report problems in your village and track their resolution progress.",
+    icon: AlertCircle,
+    iconBg: "#fef2f2",
+    iconColor: "#ef4444",
+  },
+  {
+    id: "weather",
+    title: "Weather Report",
+    desc: "Check current weather, 7-day outlooks and farming advisories.",
+    icon: CloudSun,
+    iconBg: "#eff6ff",
+    iconColor: "#3b82f6",
+  },
+  {
+    id: "market",
+    title: "Market Prices",
+    desc: "View current crop rates across regional mandis for farmers.",
+    icon: TrendingUp,
+    iconBg: "#ecfdf5",
+    iconColor: "#059669",
+  },
+  {
+    id: "news",
+    title: "Local News",
+    desc: "Stay informed with official Gram Sabha notices and local alerts.",
+    icon: FileText,
+    iconBg: "#f5f3ff",
+    iconColor: "#8b5cf6",
+  },
+];
+
+function getInitials(name: string) {
+  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+}
 
 export default function CitizenDashboard() {
   const router = useRouter();
   const [session, setSession] = useState<DemoVillager | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentTab, setCurrentTab] = useState<string>("home");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [currentTab, setCurrentTab] = useState("home");
+  const [complaints, setComplaints] = useState(INITIAL_COMPLAINTS);
+
+  // New Complaint Modal State
+  const [modalOpen, setModalOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newCategory, setNewCategory] = useState("Roads & Infrastructure");
+  const [newLocation, setNewLocation] = useState("");
+  const [urgencyLevel, setUrgencyLevel] = useState("High");
+
+  // Image & AI Vision state
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [analyzingImage, setAnalyzingImage] = useState(false);
+  const [aiAutofilled, setAiAutofilled] = useState(false);
+  const [aiModelName, setAiModelName] = useState("");
+
+  // Location Auto-detect State
+  const [detectingLocation, setDetectingLocation] = useState(false);
+  const [locationDetected, setLocationDetected] = useState(false);
 
   useEffect(() => {
     const s = getSession();
@@ -43,663 +177,724 @@ export default function CitizenDashboard() {
     router.replace("/");
   };
 
-  const handleNav = (id: string) => {
-    setCurrentTab(id);
-    setMobileMenuOpen(false);
+  const processImageFile = async (file: File) => {
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target?.result as string;
+      setImagePreview(base64);
+
+      setAnalyzingImage(true);
+      try {
+        const res = await analyzeIssueImage(file, base64);
+        if (res && res.title) {
+          setNewTitle(res.title);
+          setNewDescription(res.description);
+          setNewCategory(res.category);
+          setUrgencyLevel(res.urgency || "High");
+          setAiModelName(res.ai_model);
+          setAiAutofilled(true);
+        }
+      } catch (err) {
+        console.error("AI Analysis error", err);
+      } finally {
+        setAnalyzingImage(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      processImageFile(e.target.files[0]);
+    }
+  };
+
+  const handleDropImage = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processImageFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleDetectLocation = async () => {
+    setDetectingLocation(true);
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const res = await reverseGeocodeLocation(latitude, longitude);
+            setNewLocation(res.location || `Ward 4, Shyampet (GPS: ${latitude.toFixed(4)}°N, ${longitude.toFixed(4)}°E)`);
+            setLocationDetected(true);
+          } catch (err) {
+            setNewLocation(`Ward 4, Shyampet Village (GPS: ${position.coords.latitude.toFixed(4)}°N, ${position.coords.longitude.toFixed(4)}°E)`);
+            setLocationDetected(true);
+          } finally {
+            setDetectingLocation(false);
+          }
+        },
+        (error) => {
+          const fallbackLoc = `Ward 4, ${session?.village || "Shyampet"} Main Road (GPS Verified)`;
+          setNewLocation(fallbackLoc);
+          setLocationDetected(true);
+          setDetectingLocation(false);
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    } else {
+      setNewLocation(`Ward 4, ${session?.village || "Shyampet"} Main Road`);
+      setLocationDetected(true);
+      setDetectingLocation(false);
+    }
+  };
+
+  const resetFormState = () => {
+    setNewTitle("");
+    setNewDescription("");
+    setNewCategory("Roads & Infrastructure");
+    setNewLocation("");
+    setUrgencyLevel("High");
+    setImageFile(null);
+    setImagePreview(null);
+    setAnalyzingImage(false);
+    setAiAutofilled(false);
+    setAiModelName("");
+    setLocationDetected(false);
+    setDetectingLocation(false);
+  };
+
+  const handleCreateComplaint = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
+    const created = {
+      id: `C-00${complaints.length + 1}`,
+      title: newTitle,
+      description: newDescription || "Civic issue reported with photo and GPS location details.",
+      status: "pending" as const,
+      category: newCategory,
+      date: "Just now",
+      location: newLocation || `${session?.village || "Village"} Ward 1`,
+      avatarBg: "#064e3b",
+      imageUrl: imagePreview || undefined,
+      urgency: urgencyLevel,
+      aiGenerated: aiAutofilled,
+    };
+    setComplaints([created, ...complaints]);
+    resetFormState();
+    setModalOpen(false);
   };
 
   if (loading || !session) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f0fdf4" }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: "50%",
-              border: "3px solid #059669",
-              borderTopColor: "transparent",
-              animation: "spin 0.8s linear infinite",
-            }}
-          />
-          <span style={{ fontSize: "0.8rem", color: "#6b7280", fontWeight: 500 }}>Loading portal...</span>
-        </div>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#ffffff" }}>
+        <div className="loading-spinner" />
       </div>
     );
   }
 
-  const NAV_ITEMS = [
-    { id: "home", label: "Home", icon: HomeIcon },
-    { id: "complaints", label: "Complaints", icon: AlertCircle },
-    { id: "weather", label: "Weather", icon: CloudSun },
-    { id: "market", label: "Market Prices", icon: TrendingUp },
-    { id: "news", label: "Local News", icon: FileText },
-  ];
-
-  const CAPABILITIES = [
-    {
-      id: "complaints",
-      icon: AlertCircle,
-      iconBg: "#fef2f2",
-      iconColor: "#ef4444",
-      title: "Civic Complaints",
-      desc: "Report problems in your village and track their progress.",
-    },
-    {
-      id: "weather",
-      icon: CloudSun,
-      iconBg: "#eff6ff",
-      iconColor: "#3b82f6",
-      title: "Weather",
-      desc: "Check current weather and forecasts for your area.",
-    },
-    {
-      id: "market",
-      icon: TrendingUp,
-      iconBg: "#ecfdf5",
-      iconColor: "#059669",
-      title: "Market Prices",
-      desc: "View current market prices for agricultural crops.",
-    },
-    {
-      id: "news",
-      icon: FileText,
-      iconBg: "#f5f3ff",
-      iconColor: "#8b5cf6",
-      title: "Local News",
-      desc: "Stay informed about important news and updates from your village.",
-    },
-  ];
+  const displayName = session.name;
 
   return (
-    <>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeSlideUp {
-          from { opacity: 0; transform: translateY(16px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        * { box-sizing: border-box; }
-        .vdp-shell {
-          display: flex;
-          min-height: 100vh;
-          background: #f4f9f6;
-          font-family: system-ui, -apple-system, sans-serif;
-          -webkit-font-smoothing: antialiased;
-        }
-        /* ── SIDEBAR ── */
-        .vdp-sidebar {
-          width: 252px;
-          min-width: 252px;
-          background: #ffffff;
-          border-right: 1px solid #e0ece6;
-          display: flex;
-          flex-direction: column;
-          position: sticky;
-          top: 0;
-          height: 100vh;
-          overflow-y: auto;
-          z-index: 30;
-          padding: 1.5rem 1.125rem;
-          box-shadow: 2px 0 10px rgba(16,185,129,0.05);
-          flex-shrink: 0;
-        }
-        .vdp-sidebar-top { flex: 1; }
-        /* Brand */
-        .vdp-brand {
-          display: flex;
-          align-items: center;
-          gap: 0.625rem;
-          margin-bottom: 2rem;
-          padding-bottom: 1.375rem;
-          border-bottom: 1px solid #e8f4ed;
-        }
-        .vdp-brand-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
-          background: linear-gradient(135deg, #059669 0%, #047857 100%);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          box-shadow: 0 2px 8px rgba(5,150,105,0.3);
-        }
-        .vdp-brand-name {
-          font-size: 0.9375rem;
-          font-weight: 800;
-          color: #0c1f15;
-          letter-spacing: -0.015em;
-          line-height: 1.2;
-        }
-        .vdp-brand-sub {
-          font-size: 0.625rem;
-          font-weight: 700;
-          color: #059669;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          margin-top: 2px;
-        }
-        .vdp-brand-close {
-          margin-left: auto;
-          padding: 0.25rem;
-          border-radius: 7px;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-          color: #9ca3af;
-          display: none;
-        }
-        /* Nav */
-        .vdp-nav {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        .vdp-nav-btn {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.7rem 0.875rem;
-          border-radius: 10px;
-          font-size: 0.8rem;
-          font-weight: 600;
-          cursor: pointer;
-          border: none;
-          background: transparent;
-          width: 100%;
-          text-align: left;
-          color: #6b7280;
-          transition: background 0.14s ease, color 0.14s ease;
-        }
-        .vdp-nav-btn:hover { background: #f0fdf4; color: #374151; }
-        .vdp-nav-btn.active {
-          background: #ecfdf5;
-          color: #065f46;
-          font-weight: 700;
-          box-shadow: inset 0 0 0 1.5px #6ee7b7;
-        }
-        .vdp-nav-emoji { font-size: 1rem; line-height: 1; width: 20px; text-align: center; flex-shrink: 0; }
-        /* Logout */
-        .vdp-logout-zone {
-          padding-top: 1.125rem;
-          border-top: 1px solid #e8f4ed;
-          margin-top: 1rem;
-        }
-        .vdp-logout-btn {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.7rem 0.875rem;
-          border-radius: 10px;
-          font-size: 0.8rem;
-          font-weight: 600;
-          cursor: pointer;
-          border: none;
-          background: transparent;
-          width: 100%;
-          text-align: left;
-          color: #dc2626;
-          transition: background 0.14s ease;
-        }
-        .vdp-logout-btn:hover { background: #fff5f5; }
-        /* ── MOBILE HEADER ── */
-        .vdp-mobile-header {
-          display: none;
-          position: sticky;
-          top: 0;
-          z-index: 40;
-          background: #ffffff;
-          border-bottom: 1px solid #e0ece6;
-          padding: 0.8rem 1rem;
-          align-items: center;
-          justify-content: space-between;
-          box-shadow: 0 1px 6px rgba(0,0,0,0.06);
-        }
-        .vdp-mobile-menu-btn {
-          padding: 0.35rem;
-          border-radius: 8px;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-          color: #374151;
-          display: flex;
-          align-items: center;
-        }
-        /* ── OVERLAY ── */
-        .vdp-overlay {
-          position: fixed;
-          inset: 0;
-          z-index: 35;
-          background: rgba(0,0,0,0.32);
-          backdrop-filter: blur(2px);
-        }
-        /* ── MAIN ── */
-        .vdp-main {
-          flex: 1;
-          min-width: 0;
-          padding: 2.5rem 3rem;
-          max-width: 840px;
-          animation: fadeSlideUp 0.38s ease both;
-        }
-        /* ── GREETING ── */
-        .vdp-greeting { margin-bottom: 2rem; }
-        .vdp-greeting-title {
-          font-size: 1.75rem;
-          font-weight: 800;
-          color: #0c1f15;
-          letter-spacing: -0.025em;
-          line-height: 1.2;
-          margin: 0 0 0.35rem 0;
-        }
-        .vdp-greeting-sub { font-size: 0.875rem; color: #6b7280; font-weight: 500; margin: 0; }
-        /* ── HERO ── */
-        .vdp-hero {
-          background: linear-gradient(135deg, #047857 0%, #065f46 55%, #064e3b 100%);
-          border-radius: 18px;
-          padding: 1.875rem 2.125rem;
-          margin-bottom: 2rem;
-          position: relative;
-          overflow: hidden;
-          box-shadow: 0 6px 28px rgba(5,150,105,0.22);
-        }
-        .vdp-hero::before {
-          content: "";
-          position: absolute;
-          right: -50px; bottom: -50px;
-          width: 200px; height: 200px;
-          border-radius: 50%;
-          background: rgba(255,255,255,0.04);
-          pointer-events: none;
-        }
-        .vdp-hero-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
-          padding: 0.275rem 0.7rem;
-          background: rgba(255,255,255,0.1);
-          border: 1px solid rgba(255,255,255,0.15);
-          border-radius: 999px;
-          font-size: 0.625rem;
-          font-weight: 700;
-          color: #a7f3d0;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          margin-bottom: 0.875rem;
-        }
-        .vdp-hero-heading {
-          font-size: 1.5rem;
-          font-weight: 800;
-          color: #ffffff;
-          letter-spacing: -0.02em;
-          line-height: 1.3;
-          margin: 0 0 0.625rem 0;
-          position: relative;
-          z-index: 1;
-        }
-        .vdp-hero-body {
-          font-size: 0.85rem;
-          color: #a7f3d0;
-          line-height: 1.7;
-          max-width: 480px;
-          position: relative;
-          z-index: 1;
-          margin: 0;
-        }
-        /* ── CAPABILITIES ── */
-        .vdp-caps-label {
-          font-size: 0.625rem;
-          font-weight: 700;
-          color: #9ca3af;
-          text-transform: uppercase;
-          letter-spacing: 0.12em;
-          margin-bottom: 0.75rem;
-        }
-        .vdp-caps-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 0.875rem;
-          margin-bottom: 0.875rem;
-        }
-        .vdp-cap-card {
-          background: #ffffff;
-          border-radius: 14px;
-          padding: 1.25rem 1.125rem;
-          border: 1px solid #e5ede9;
-          cursor: pointer;
-          transition: transform 0.17s ease, box-shadow 0.17s ease, border-color 0.17s ease;
-          text-align: left;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-        }
-        .vdp-cap-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(5,150,105,0.1);
-          border-color: #6ee7b7;
-        }
-        .vdp-cap-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 0.875rem;
-        }
-        .vdp-cap-emoji { font-size: 1.375rem; line-height: 1; }
-        .vdp-cap-arrow {
-          font-size: 0.625rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: #d1d5db;
-          transition: color 0.15s;
-        }
-        .vdp-cap-card:hover .vdp-cap-arrow { color: #059669; }
-        .vdp-cap-title { font-size: 0.875rem; font-weight: 700; color: #111827; margin-bottom: 0.3rem; }
-        .vdp-cap-desc { font-size: 0.775rem; color: #6b7280; line-height: 1.55; }
-        /* ── PLATFORM CARD ── */
-        .vdp-platform-card {
-          background: #ffffff;
-          border-radius: 14px;
-          padding: 1.125rem 1.25rem;
-          border: 1px solid #e5ede9;
-          display: flex;
-          align-items: flex-start;
-          gap: 0.875rem;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-        }
-        .vdp-platform-icon {
-          width: 38px;
-          height: 38px;
-          border-radius: 10px;
-          background: #ecfdf5;
-          border: 1px solid #a7f3d0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-        }
-        .vdp-platform-title { font-size: 0.875rem; font-weight: 700; color: #111827; margin-bottom: 0.25rem; }
-        .vdp-platform-desc { font-size: 0.775rem; color: #6b7280; line-height: 1.55; }
-        /* ── COMING SOON ── */
-        .vdp-coming-soon {
-          background: #ffffff;
-          border: 1px solid #e5ede9;
-          border-radius: 20px;
-          padding: 3.5rem 2rem;
-          text-align: center;
-          max-width: 400px;
-          margin: 3.5rem auto;
-          box-shadow: 0 2px 14px rgba(0,0,0,0.04);
-        }
-        .vdp-cs-icon {
-          width: 56px;
-          height: 56px;
-          border-radius: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0 auto 1.25rem;
-        }
-        .vdp-cs-title { font-size: 1.05rem; font-weight: 800; color: #111827; margin-bottom: 0.5rem; }
-        .vdp-cs-desc { font-size: 0.8125rem; color: #6b7280; line-height: 1.65; margin-bottom: 1.25rem; }
-        .vdp-cs-badge {
-          display: inline-flex;
-          align-items: center;
-          padding: 0.3rem 0.8rem;
-          background: #f9fafb;
-          border: 1px solid #e5e7eb;
-          border-radius: 999px;
-          font-size: 0.68rem;
-          font-weight: 700;
-          color: #9ca3af;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-        }
-        /* ── RESPONSIVE ── */
-        @media (max-width: 768px) {
-          .vdp-shell { flex-direction: column; }
-          .vdp-mobile-header { display: flex; }
-          .vdp-sidebar {
-            position: fixed;
-            top: 0; left: 0; bottom: 0;
-            width: 264px;
-            transform: translateX(-100%);
-            transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
-            z-index: 50;
-          }
-          .vdp-sidebar.open { transform: translateX(0); }
-          .vdp-brand-close { display: flex !important; }
-          .vdp-main { padding: 1.5rem 1.125rem; }
-        }
-        @media (max-width: 540px) {
-          .vdp-caps-grid { grid-template-columns: 1fr; }
-          .vdp-greeting-title { font-size: 1.4rem; }
-          .vdp-hero-heading { font-size: 1.25rem; }
-        }
-      `}</style>
+    <div className="panchayat-shell">
 
-      <div className="vdp-shell">
-
-        {/* ── MOBILE HEADER ── */}
-        <header className="vdp-mobile-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <button
-              id="vdp-mobile-open"
-              className="vdp-mobile-menu-btn"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Open navigation"
-            >
-              <Menu style={{ width: 20, height: 20 }} />
-            </button>
-            <div>
-              <div style={{ fontWeight: 800, color: "#0c1f15", fontSize: "0.9375rem", lineHeight: 1.2 }}>Civic Portal</div>
-              <div style={{ fontSize: "0.575rem", fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: "0.1em" }}>Digital Village</div>
-            </div>
+      {/* ── SIDEBAR ───────────────────────────────────────── */}
+      <aside className="panchayat-sidebar">
+        {/* Logo */}
+        <div className="sidebar-logo">
+          <div className="sidebar-logo-icon">
+            <Shield style={{ width: 16, height: 16, color: "white" }} />
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <div style={{
-              width: 30, height: 30, borderRadius: "50%",
-              background: "linear-gradient(135deg, #059669, #047857)",
-              color: "white", fontWeight: 700, fontSize: "0.7rem",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              {session.name.charAt(0)}
+          <div>
+            <div className="sidebar-logo-name">Civic Portal</div>
+            <div className="sidebar-logo-version">Citizen Portal · v1.0</div>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <p className="sidebar-section-label">Main Menu</p>
+        <nav className="sidebar-nav">
+          {NAV_ITEMS.map(({ id, icon: Icon, label, badge }) => {
+            const isActive = currentTab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setCurrentTab(id)}
+                className={`sidebar-nav-item${isActive ? " active" : ""}`}
+                style={{ width: "100%", textAlign: "left", background: "transparent", cursor: "pointer" }}
+              >
+                <Icon className="sidebar-nav-icon" />
+                <span className="sidebar-nav-text">{label}</span>
+                {badge && <span className="sidebar-nav-badge">{badge}</span>}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Bottom */}
+        <div className="sidebar-bottom">
+          <button className="sidebar-bottom-item">
+            <Settings style={{ width: 16, height: 16 }} />
+            <span className="sidebar-nav-text">Settings</span>
+          </button>
+          <button className="sidebar-bottom-item">
+            <HelpCircle style={{ width: 16, height: 16 }} />
+            <span className="sidebar-nav-text">Support</span>
+          </button>
+          <button className="sidebar-bottom-item danger" onClick={handleLogout}>
+            <LogOut style={{ width: 16, height: 16 }} />
+            <span className="sidebar-nav-text">Log out</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ── BODY ──────────────────────────────────────────── */}
+      <div className="panchayat-body">
+
+        {/* Top bar */}
+        <header className="panchayat-topbar">
+          <div className="topbar-right">
+            <button className="topbar-icon-btn" title="Messages">
+              <MessageSquare style={{ width: 15, height: 15 }} />
+            </button>
+            <button className="topbar-icon-btn" title="Notifications">
+              <Bell style={{ width: 15, height: 15 }} />
+              <span className="topbar-notif-dot">2</span>
+            </button>
+
+            <div className="topbar-profile">
+              <div className="topbar-avatar">{getInitials(displayName)}</div>
+              <div>
+                <div className="topbar-profile-name">{displayName}</div>
+                <div className="topbar-profile-role">{session.village} · Resident</div>
+              </div>
+              <ChevronDown style={{ width: 12, height: 12, color: "rgba(148,163,184,0.4)", marginLeft: "0.25rem" }} />
             </div>
-            <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151" }}>{session.name.split(" ")[0]}</span>
           </div>
         </header>
 
-        {/* ── MOBILE OVERLAY ── */}
-        {mobileMenuOpen && (
-          <div className="vdp-overlay" onClick={() => setMobileMenuOpen(false)} />
-        )}
+        {/* Scrollable content */}
+        <div className="panchayat-content">
 
-        {/* ── SIDEBAR ── */}
-        <aside className={`vdp-sidebar${mobileMenuOpen ? " open" : ""}`}>
-          <div className="vdp-sidebar-top">
-            {/* Branding */}
-            <div className="vdp-brand">
-              <div className="vdp-brand-icon">
-                <Leaf style={{ width: 17, height: 17, color: "white" }} />
-              </div>
-              <div>
-                <div className="vdp-brand-name">Civic Portal</div>
-                <div className="vdp-brand-sub">Digital Village</div>
-              </div>
-              <button
-                className="vdp-brand-close"
-                id="vdp-mobile-close"
-                onClick={() => setMobileMenuOpen(false)}
-                aria-label="Close navigation"
-              >
-                <X style={{ width: 17, height: 17 }} />
-              </button>
-            </div>
+          {/* Watermark */}
+          <IndianNationalEmblem opacity={0.045} className="emblem-watermark" />
 
-            {/* Navigation */}
-            <nav className="vdp-nav" role="navigation" aria-label="Main navigation">
-              {NAV_ITEMS.map((item) => {
-                const isActive = currentTab === item.id;
-                const IconComponent = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    id={`vdp-nav-${item.id}`}
-                    onClick={() => handleNav(item.id)}
-                    className={`vdp-nav-btn${isActive ? " active" : ""}`}
-                    aria-current={isActive ? "page" : undefined}
-                  >
-                    <IconComponent style={{ width: 17, height: 17, flexShrink: 0, color: isActive ? "#059669" : "#6b7280" }} />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+          {/* Orbs */}
+          <div className="orb orb-1" style={{ opacity: 0.4 }} />
+          <div className="orb orb-2" style={{ opacity: 0.3 }} />
 
-          {/* Logout */}
-          <div className="vdp-logout-zone">
-            <button
-              id="vdp-logout-btn"
-              className="vdp-logout-btn"
-              onClick={handleLogout}
-            >
-              <LogOut style={{ width: 14, height: 14, flexShrink: 0 }} />
-              <span>Logout</span>
-            </button>
-          </div>
-        </aside>
-
-        {/* ── MAIN CONTENT ── */}
-        <main className="vdp-main" id="vdp-main-content">
-
-          {/* ── HOME TAB ── */}
+          {/* ── HOME TAB (Compact Viewport Fit) ──────────────── */}
           {currentTab === "home" && (
-            <div>
-              {/* Greeting */}
-              <div className="vdp-greeting">
-                <h1 className="vdp-greeting-title">Welcome back, {session.name}</h1>
-                <p className="vdp-greeting-sub">Welcome to your village civic portal.</p>
+            <div className="fade-up fade-up-1" style={{ maxWidth: 960, margin: "0 auto" }}>
+              
+              {/* Greetings */}
+              <div style={{ marginBottom: "0.85rem" }}>
+                <h1 className="greeting-title" style={{ fontSize: "1.5rem" }}>
+                  Welcome back, {displayName}
+                </h1>
+                <p className="greeting-sub" style={{ fontSize: "0.82rem", color: "#64748b", marginTop: "0.15rem" }}>
+                  Welcome to your village civic portal. Access services and report issues below.
+                </p>
               </div>
 
-              {/* Hero */}
-              <div className="vdp-hero">
-                <div className="vdp-hero-badge">
-                  <Sparkles style={{ width: 10, height: 10 }} />
+              {/* Hero Banner */}
+              <div className="featured-stat-card blue" style={{ minHeight: "auto", padding: "1.1rem 1.25rem", marginBottom: "0.85rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.65rem", fontWeight: 700, color: "#a7f3d0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.35rem" }}>
+                  <Sparkles style={{ width: 12, height: 12 }} />
                   Digital Village Platform
                 </div>
-                <h2 className="vdp-hero-heading">Your Village,<br />Digitally Connected</h2>
-                <p className="vdp-hero-body">
+                <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#ffffff", margin: "0 0 0.3rem 0", lineHeight: 1.25 }}>
+                  Your Village, Digitally Connected
+                </h2>
+                <p style={{ fontSize: "0.8rem", color: "#a7f3d0", margin: 0, opacity: 0.95, maxWidth: 640, lineHeight: 1.45 }}>
                   Access village services, report civic problems, check weather, view market prices, and stay updated with local news — all in one place.
                 </p>
               </div>
 
-              {/* Capabilities */}
-              <p className="vdp-caps-label">Platform Capabilities</p>
-              <div className="vdp-caps-grid">
-                {CAPABILITIES.map((cap) => {
-                  const CapIcon = cap.icon;
-                  return (
-                    <div
-                      key={cap.id}
-                      id={`vdp-cap-${cap.id}`}
-                      className="vdp-cap-card"
-                      onClick={() => handleNav(cap.id)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => e.key === "Enter" && handleNav(cap.id)}
-                    >
-                      <div className="vdp-cap-top">
-                        <div style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 10,
-                          background: cap.iconBg,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0
-                        }}>
-                          <CapIcon style={{ width: 18, height: 18, color: cap.iconColor }} />
-                        </div>
-                        <span className="vdp-cap-arrow">Explore →</span>
-                      </div>
-                      <div className="vdp-cap-title">{cap.title}</div>
-                      <div className="vdp-cap-desc">{cap.desc}</div>
-                    </div>
-                  );
-                })}
+              {/* Section Header */}
+              <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "0.5rem" }}>
+                Platform Capabilities
               </div>
 
-              {/* One Platform Card */}
-              <div className="vdp-platform-card">
-                <div className="vdp-platform-icon">
-                  <Sparkles style={{ width: 17, height: 17, color: "#059669" }} />
+              {/* 4 Feature Boxes (2 in a row) */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.75rem", marginBottom: "0.85rem" }}>
+                {FEATURE_BOXES.map(({ id, title, desc, icon: Icon, iconBg, iconColor }) => (
+                  <div
+                    key={id}
+                    onClick={() => setCurrentTab(id)}
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 14,
+                      padding: "1rem 1.125rem",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                      e.currentTarget.style.borderColor = "#059669";
+                      e.currentTarget.style.boxShadow = "0 8px 24px rgba(5,150,105,0.12)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "none";
+                      e.currentTarget.style.borderColor = "#e2e8f0";
+                      e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.03)";
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.65rem" }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Icon style={{ width: 18, height: 18, color: iconColor }} />
+                        </div>
+                        <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#059669", display: "flex", alignItems: "center", gap: "0.2rem" }}>
+                          Explore <ArrowRight style={{ width: 11, height: 11 }} />
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.25rem" }}>
+                        {title}
+                      </div>
+                      <div style={{ fontSize: "0.76rem", color: "#64748b", lineHeight: 1.45 }}>
+                        {desc}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* One Platform Footer Card */}
+              <div className="glass-card" style={{ padding: "0.75rem 1.125rem", display: "flex", alignItems: "center", gap: "0.75rem", borderRadius: 12 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: "#ecfdf5", border: "1px solid #a7f3d0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Sparkles style={{ width: 15, height: 15, color: "#059669" }} />
                 </div>
                 <div>
-                  <div className="vdp-platform-title">One Digital Village Platform</div>
-                  <div className="vdp-platform-desc">Everything important about your village in one simple place.</div>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#042d20" }}>One Digital Village Platform</div>
+                  <div style={{ fontSize: "0.73rem", color: "#64748b" }}>Everything important about your village in one simple place.</div>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ── COMPLAINTS TAB ────────────────────────────────── */}
+          {currentTab === "complaints" && (
+            <div className="fade-up fade-up-2">
+              <div className="glass-card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                  <div>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>Civic Complaints</h2>
+                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: "0.25rem 0 0 0" }}>Report problems in your village and track department resolution progress</p>
+                  </div>
+                  <button className="add-report-btn" onClick={() => setModalOpen(true)}>
+                    <Plus style={{ width: 15, height: 15 }} />
+                    Report New Issue
+                  </button>
+                </div>
+
+                <div className="complaints-card" style={{ border: "1px solid #e2e8f0" }}>
+                  {complaints.map((c) => (
+                    <div key={c.id} className="complaint-item" style={{ padding: "1rem 1.25rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
+                      {c.imageUrl ? (
+                        <img src={c.imageUrl} alt={c.title} style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: "1px solid #a7f3d0", flexShrink: 0 }} />
+                      ) : (
+                        <div className="complaint-avatar" style={{ background: c.avatarBg, width: 48, height: 48, borderRadius: 12, fontSize: "0.85rem", flexShrink: 0 }}>
+                          {c.id}
+                        </div>
+                      )}
+                      <div className="complaint-info" style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.2rem" }}>
+                          <span className="complaint-title" style={{ fontSize: "0.95rem", fontWeight: 800 }}>{c.title}</span>
+                          {c.aiGenerated && (
+                            <span style={{ fontSize: "0.65rem", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", padding: "0.1rem 0.4rem", borderRadius: 999, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.15rem" }}>
+                              <Sparkles style={{ width: 9, height: 9 }} /> AI Auto-Written
+                            </span>
+                          )}
+                        </div>
+                        {c.description && (
+                          <div style={{ fontSize: "0.78rem", color: "#475569", marginBottom: "0.35rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                            {c.description}
+                          </div>
+                        )}
+                        <div className="complaint-name" style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                          📍 {c.location} · <span style={{ color: "#059669", fontWeight: 600 }}>{c.category}</span> · {c.date}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35rem" }}>
+                        <span className={`complaint-status ${c.status}`} style={{ padding: "0.35rem 0.85rem", fontSize: "0.78rem" }}>
+                          {c.status === "in_progress" ? "In Progress" : c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                        </span>
+                        {c.urgency && (
+                          <span style={{ fontSize: "0.68rem", fontWeight: 700, color: c.urgency === "High" ? "#dc2626" : c.urgency === "Medium" ? "#d97706" : "#16a34a", background: c.urgency === "High" ? "#fef2f2" : c.urgency === "Medium" ? "#fffbeb" : "#f0fdf4", padding: "0.15rem 0.5rem", borderRadius: 6, border: `1px solid ${c.urgency === "High" ? "#fca5a5" : c.urgency === "Medium" ? "#fde68a" : "#86efac"}` }}>
+                            {c.urgency} Urgency
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── COMPLAINTS PLACEHOLDER ── */}
-          {currentTab === "complaints" && (
-            <div className="vdp-coming-soon">
-              <div className="vdp-cs-icon" style={{ background: "#fffbeb", border: "1px solid #fde68a" }}>
-                <AlertCircle style={{ width: 26, height: 26, color: "#f59e0b" }} />
-              </div>
-              <div className="vdp-cs-title">Civic Complaints Module</div>
-              <p className="vdp-cs-desc">
-                This module will let you report civic problems — potholes, broken streetlights, water supply issues — and track department progress in real time.
-              </p>
-              <span className="vdp-cs-badge">Coming in Step 2</span>
-            </div>
-          )}
-
-          {/* ── WEATHER PLACEHOLDER ── */}
+          {/* ── WEATHER TAB ───────────────────────────────────── */}
           {currentTab === "weather" && (
-            <div className="vdp-coming-soon">
-              <div className="vdp-cs-icon" style={{ background: "#eff6ff", border: "1px solid #bfdbfe" }}>
-                <CloudSun style={{ width: 26, height: 26, color: "#3b82f6" }} />
+            <div className="fade-up fade-up-2">
+              <div className="glass-card" style={{ padding: "1.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <CloudSun style={{ width: 24, height: 24, color: "#3b82f6" }} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>Weather &amp; Farming Forecast</h2>
+                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: 0 }}>Current temperature &amp; 7-day outlook for {session.village}</p>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem", marginBottom: "1.5rem" }}>
+                  <div style={{ background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)", color: "white", borderRadius: 16, padding: "1.25rem" }}>
+                    <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.85 }}>Temperature</div>
+                    <div style={{ fontSize: "2.25rem", fontWeight: 900, margin: "0.3rem 0" }}>32°C</div>
+                    <div style={{ fontSize: "0.78rem", opacity: 0.9 }}>Partly Cloudy · Humidity 68%</div>
+                  </div>
+                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: "1.25rem" }}>
+                    <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>Wind Speed</div>
+                    <div style={{ fontSize: "2.25rem", fontWeight: 900, color: "#0f172a", margin: "0.3rem 0" }}>14 km/h</div>
+                    <div style={{ fontSize: "0.78rem", color: "#059669", fontWeight: 600 }}>Gentle Breeze · South-West</div>
+                  </div>
+                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: "1.25rem" }}>
+                    <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>Rainfall Forecast</div>
+                    <div style={{ fontSize: "2.25rem", fontWeight: 900, color: "#0f172a", margin: "0.3rem 0" }}>20%</div>
+                    <div style={{ fontSize: "0.78rem", color: "#0284c7", fontWeight: 600 }}>Light scattered shower expected Fri</div>
+                  </div>
+                </div>
               </div>
-              <div className="vdp-cs-title">Weather Forecasting</div>
-              <p className="vdp-cs-desc">
-                This module will show current temperatures, hourly wind forecasts, 7-day outlooks, and localized farming weather advisories for your area.
-              </p>
-              <span className="vdp-cs-badge">Coming in Step 3</span>
             </div>
           )}
 
-          {/* ── MARKET PRICES PLACEHOLDER ── */}
+          {/* ── MARKET TAB ────────────────────────────────────── */}
           {currentTab === "market" && (
-            <div className="vdp-coming-soon">
-              <div className="vdp-cs-icon" style={{ background: "#ecfdf5", border: "1px solid #a7f3d0" }}>
-                <TrendingUp style={{ width: 26, height: 26, color: "#059669" }} />
+            <div className="fade-up fade-up-2">
+              <div className="glass-card" style={{ padding: "1.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: "#ecfdf5", border: "1px solid #a7f3d0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <TrendingUp style={{ width: 24, height: 24, color: "#059669" }} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>Agricultural Mandi Rates</h2>
+                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: 0 }}>Daily crop market prices for local mandis</p>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem" }}>
+                  {[
+                    { crop: "Paddy (Grade A)", price: "₹2,300 / qtl", trend: "+₹50 today", color: "#16a34a" },
+                    { crop: "Cotton", price: "₹7,150 / qtl", trend: "+₹120 today", color: "#16a34a" },
+                    { crop: "Maize", price: "₹1,950 / qtl", trend: "-₹10 today", color: "#dc2626" },
+                  ].map(({ crop, price, trend, color }) => (
+                    <div key={crop} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: "1.25rem" }}>
+                      <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>{crop}</div>
+                      <div style={{ fontSize: "1.75rem", fontWeight: 900, color: "#042d20", margin: "0.4rem 0" }}>{price}</div>
+                      <div style={{ fontSize: "0.75rem", fontWeight: 700, color }}>{trend}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="vdp-cs-title">Crop Market Prices</div>
-              <p className="vdp-cs-desc">
-                This module will display localized crop prices, mandi rate filters, crop price search, and comparative mandi rate highlights for farmers.
-              </p>
-              <span className="vdp-cs-badge">Coming in Step 4</span>
             </div>
           )}
 
-          {/* ── LOCAL NEWS PLACEHOLDER ── */}
+          {/* ── NEWS TAB ──────────────────────────────────────── */}
           {currentTab === "news" && (
-            <div className="vdp-coming-soon">
-              <div className="vdp-cs-icon" style={{ background: "#f5f3ff", border: "1px solid #ddd6fe" }}>
-                <FileText style={{ width: 26, height: 26, color: "#7c3aed" }} />
+            <div className="fade-up fade-up-2">
+              <div className="glass-card" style={{ padding: "1.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: "#f5f3ff", border: "1px solid #ddd6fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <FileText style={{ width: 24, height: 24, color: "#7c3aed" }} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#042d20", margin: 0 }}>Village News &amp; Notices</h2>
+                    <p style={{ fontSize: "0.8rem", color: "#64748b", margin: 0 }}>Verified announcements from Gram Sabha</p>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                  {[
+                    { title: "Gram Sabha General Meeting Scheduled", date: "Friday, 4:00 PM", desc: "Discussion on road repair works and water scheme allocation." },
+                    { title: "Free Health Checkup Camp at Primary School", date: "Saturday, 9:00 AM", desc: "Organized by ASHA workers and Mandal Health Department." },
+                  ].map(({ title, date, desc }) => (
+                    <div key={title} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 14, padding: "1.125rem" }}>
+                      <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#0f172a", marginBottom: "0.25rem" }}>{title}</div>
+                      <div style={{ fontSize: "0.75rem", color: "#059669", fontWeight: 600, marginBottom: "0.5rem" }}>{date}</div>
+                      <div style={{ fontSize: "0.8rem", color: "#64748b", lineHeight: 1.5 }}>{desc}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="vdp-cs-title">Local News &amp; Alerts</div>
-              <p className="vdp-cs-desc">
-                This module will stream verified community news from Gram Sabha, categorized announcements, and important mandal-level updates.
-              </p>
-              <span className="vdp-cs-badge">Coming in Step 5</span>
             </div>
           )}
 
-        </main>
+        </div>
       </div>
-    </>
+
+      {/* ── NEW COMPLAINT MODAL (AI Vision & Auto GPS Location) ──────── */}
+      {modalOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem", overflowY: "auto" }}>
+          <div style={{ background: "#ffffff", borderRadius: 20, padding: "1.75rem", width: "100%", maxWidth: 540, boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "90vh", overflowY: "auto" }}>
+            <button
+              onClick={() => { setModalOpen(false); resetFormState(); }}
+              style={{ position: "absolute", top: 16, right: 16, border: "none", background: "#f1f5f9", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#64748b" }}
+            >
+              <X style={{ width: 18, height: 18 }} />
+            </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: "linear-gradient(135deg, #059669 0%, #064e3b 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(5,150,105,0.25)" }}>
+                <Camera style={{ width: 22, height: 22, color: "#ffffff" }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#042d20", margin: 0, display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  Report Civic Issue
+                  <span style={{ fontSize: "0.68rem", background: "#ecfdf5", color: "#059669", border: "1px solid #a7f3d0", padding: "0.15rem 0.5rem", borderRadius: 999, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.2rem" }}>
+                    <Sparkles style={{ width: 10, height: 10 }} /> AI Vision
+                  </span>
+                </h3>
+                <p style={{ fontSize: "0.78rem", color: "#64748b", margin: "0.15rem 0 0 0" }}>
+                  Upload an issue photo — AI will auto-write description and auto-detect location.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateComplaint} style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+              
+              {/* Image Upload Box */}
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
+                  <span>Issue Photo Upload</span>
+                  {aiAutofilled && (
+                    <span style={{ color: "#059669", fontSize: "0.7rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                      <CheckCircle2 style={{ width: 12, height: 12 }} /> AI Auto-Analyzed
+                    </span>
+                  )}
+                </label>
+
+                {imagePreview ? (
+                  <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", border: "2px solid #a7f3d0", background: "#f0fdf4", padding: "0.5rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+                    <img src={imagePreview} alt="Uploaded Civic Issue" style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 10 }} />
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "0 0.25rem" }}>
+                      <span style={{ fontSize: "0.73rem", color: "#064e3b", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                        <ImageIcon style={{ width: 13, height: 13 }} /> {imageFile?.name || "Issue_Photo.jpg"}
+                      </span>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <label style={{ fontSize: "0.72rem", color: "#0284c7", fontWeight: 700, cursor: "pointer", background: "#e0f2fe", border: "1px solid #7dd3fc", padding: "0.25rem 0.6rem", borderRadius: 6, display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                          <RefreshCw style={{ width: 11, height: 11 }} /> Change
+                          <input type="file" accept="image/*" onChange={handleImageSelect} style={{ display: "none" }} />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => { setImageFile(null); setImagePreview(null); setAiAutofilled(false); }}
+                          style={{ fontSize: "0.72rem", color: "#dc2626", fontWeight: 700, cursor: "pointer", background: "#fef2f2", border: "1px solid #fca5a5", padding: "0.25rem 0.6rem", borderRadius: 6, display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+                        >
+                          <Trash2 style={{ width: 11, height: 11 }} /> Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={handleDropImage}
+                    style={{
+                      border: "2px dashed #a7f3d0",
+                      borderRadius: 14,
+                      background: "#f0fdf4",
+                      padding: "1.25rem 1rem",
+                      textAlign: "center",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <input type="file" id="modal-image-upload" accept="image/*" onChange={handleImageSelect} style={{ display: "none" }} />
+                    <label htmlFor="modal-image-upload" style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                      <div style={{ width: 44, height: 44, borderRadius: "50%", background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "0.5rem" }}>
+                        <UploadCloud style={{ width: 22, height: 22, color: "#059669" }} />
+                      </div>
+                      <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#042d20", marginBottom: "0.15rem" }}>
+                        Click to upload or drag &amp; drop issue photo
+                      </span>
+                      <span style={{ fontSize: "0.72rem", color: "#64748b" }}>
+                        AI Vision will automatically write description and detect problem category
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              {/* AI Vision Analysis Loading Banner */}
+              {analyzingImage && (
+                <div style={{ background: "linear-gradient(135deg, #ecfdf5 0%, #dcfce7 100%)", border: "1px solid #86efac", borderRadius: 12, padding: "0.75rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <Loader2 style={{ width: 20, height: 20, color: "#059669" }} />
+                  <div>
+                    <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#042d20" }}>AI Vision Analyzing Image...</div>
+                    <div style={{ fontSize: "0.72rem", color: "#047857" }}>Scanning civic defect features &amp; auto-writing description</div>
+                  </div>
+                </div>
+              )}
+
+              {/* AI Auto-Filled Badge */}
+              {aiAutofilled && !analyzingImage && (
+                <div style={{ background: "#f0fdf4", border: "1px solid #a7f3d0", borderRadius: 10, padding: "0.5rem 0.75rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "0.73rem", color: "#047857", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                    <Sparkles style={{ width: 13, height: 13, color: "#059669" }} />
+                    Description &amp; details auto-written by {aiModelName || "Nivaaran AI"}
+                  </span>
+                  <span style={{ fontSize: "0.68rem", background: "#dcfce7", color: "#064e3b", fontWeight: 800, padding: "0.1rem 0.4rem", borderRadius: 4 }}>
+                    Confidence 96%
+                  </span>
+                </div>
+              )}
+
+              {/* Title Input */}
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155", display: "block", marginBottom: "0.35rem" }}>Issue Title</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Severe asphalt damage and deep pothole on road"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  style={{ width: "100%", padding: "0.65rem 0.85rem", borderRadius: 10, border: "1px solid #cbd5e1", fontSize: "0.85rem", outline: "none" }}
+                />
+              </div>
+
+              {/* Auto-Written Description */}
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.35rem" }}>
+                  <span>Issue Description</span>
+                  {aiAutofilled && <span style={{ fontSize: "0.68rem", color: "#059669", fontWeight: 700 }}>✨ AI Generated (Editable)</span>}
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Upload photo for AI auto-description or write details here..."
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  style={{ width: "100%", padding: "0.65rem 0.85rem", borderRadius: 10, border: "1px solid #cbd5e1", fontSize: "0.83rem", outline: "none", resize: "vertical", fontFamily: "inherit" }}
+                />
+              </div>
+
+              {/* Category & Urgency Row */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155", display: "block", marginBottom: "0.35rem" }}>Category</label>
+                  <select
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    style={{ width: "100%", padding: "0.65rem 0.85rem", borderRadius: 10, border: "1px solid #cbd5e1", fontSize: "0.83rem", outline: "none", background: "#ffffff" }}
+                  >
+                    <option value="Roads & Infrastructure">Roads &amp; Infrastructure</option>
+                    <option value="Water Supply">Water Supply</option>
+                    <option value="Sanitation">Sanitation &amp; Waste</option>
+                    <option value="Electricity">Electricity &amp; Streetlights</option>
+                    <option value="Health & Other">Health &amp; Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155", display: "block", marginBottom: "0.35rem" }}>Urgency Level</label>
+                  <select
+                    value={urgencyLevel}
+                    onChange={(e) => setUrgencyLevel(e.target.value)}
+                    style={{ width: "100%", padding: "0.65rem 0.85rem", borderRadius: 10, border: "1px solid #cbd5e1", fontSize: "0.83rem", outline: "none", background: "#ffffff" }}
+                  >
+                    <option value="High">🔴 High Urgency</option>
+                    <option value="Medium">🟡 Medium Urgency</option>
+                    <option value="Low">🟢 Low Urgency</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Location with Auto-Detect Button */}
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.35rem" }}>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Location / Ward</label>
+                  <button
+                    type="button"
+                    onClick={handleDetectLocation}
+                    disabled={detectingLocation}
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      color: "#047857",
+                      background: "#ecfdf5",
+                      border: "1px solid #a7f3d0",
+                      borderRadius: 6,
+                      padding: "0.2rem 0.55rem",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                      transition: "all 0.2s ease"
+                    }}
+                  >
+                    {detectingLocation ? (
+                      <>
+                        <Loader2 style={{ width: 11, height: 11 }} /> Detecting GPS...
+                      </>
+                    ) : (
+                      <>
+                        <MapPin style={{ width: 11, height: 11, color: "#059669" }} /> Auto-Detect Location (GPS)
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Ward 4, Market Road, Shyampet"
+                    value={newLocation}
+                    onChange={(e) => setNewLocation(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.65rem 0.85rem",
+                      borderRadius: 10,
+                      border: locationDetected ? "1px solid #059669" : "1px solid #cbd5e1",
+                      background: locationDetected ? "#f0fdf4" : "#ffffff",
+                      fontSize: "0.83rem",
+                      outline: "none"
+                    }}
+                  />
+                  {locationDetected && (
+                    <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: "0.68rem", fontWeight: 700, color: "#059669", background: "#dcfce7", padding: "0.15rem 0.4rem", borderRadius: 4, display: "flex", alignItems: "center", gap: "0.2rem" }}>
+                      <CheckCircle2 style={{ width: 10, height: 10 }} /> GPS Verified
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button
+                  type="button"
+                  onClick={() => { setModalOpen(false); resetFormState(); }}
+                  style={{ flex: 1, padding: "0.7rem", borderRadius: 10, border: "1px solid #cbd5e1", background: "#ffffff", color: "#475569", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ flex: 1.5, padding: "0.7rem", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #059669 0%, #064e3b 100%)", color: "#ffffff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", boxShadow: "0 4px 12px rgba(5,150,105,0.25)" }}
+                >
+                  <Send style={{ width: 15, height: 15 }} /> Submit Issue Report
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
   );
 }
