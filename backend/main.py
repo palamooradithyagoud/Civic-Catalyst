@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from db import init_db
 from seed_data import seed_database
-from routers import demo, inventory
+from routers import demo, inventory, complaints
 from models.schemas import HealthResponse
 
 load_dotenv()
@@ -48,6 +48,7 @@ app.add_middleware(
 
 app.include_router(demo.router)
 app.include_router(inventory.router)
+app.include_router(complaints.router)
 
 # ── Core endpoints ───────────────────────────────────────────────────────────
 

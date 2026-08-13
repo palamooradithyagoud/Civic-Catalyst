@@ -7,4 +7,6 @@ __pycache__/
 .next/
 node_modules/
 *.db
+.venv/
+venv/
 
