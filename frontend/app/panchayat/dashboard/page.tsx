@@ -281,12 +281,6 @@ export default function PanchayatDashboard() {
 
         {/* Top bar */}
         <header className="panchayat-topbar">
-          <div className="topbar-search">
-            <Search style={{ width: 14, height: 14, color: "rgba(148,163,184,0.4)", flexShrink: 0 }} />
-            <input className="topbar-search-input" placeholder="Search complaints, villagers..." readOnly />
-            <span className="topbar-search-kbd">⌘ K</span>
-          </div>
-
           <div className="topbar-right">
             <button className="topbar-icon-btn" title="Messages">
               <MessageSquare style={{ width: 15, height: 15 }} />

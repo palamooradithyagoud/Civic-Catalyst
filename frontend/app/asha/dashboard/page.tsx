@@ -186,30 +186,24 @@ export default function AshaDashboardPage() {
       <div className="panchayat-body">
         {/* Top Header Bar */}
         <header className="panchayat-topbar">
-          <div className="topbar-search">
-            <Search style={{ width: 14, height: 14, color: "rgba(148,163,184,0.4)", flexShrink: 0 }} />
-            <input className="topbar-search-input" placeholder="Search patients, mothers, ward health records..." readOnly />
-            <span className="topbar-shortcut">⌘ K</span>
-          </div>
-
           <div className="topbar-right">
-            <button className="topbar-icon-btn">
+            <button className="topbar-icon-btn" title="Messages">
               <MessageSquare style={{ width: 15, height: 15 }} />
             </button>
-            <button className="topbar-icon-btn active" title="2 Health Alerts">
+            <button className="topbar-icon-btn" title="2 Health Alerts">
               <Bell style={{ width: 15, height: 15 }} />
-              <span className="topbar-badge">2</span>
+              <span className="topbar-notif-dot">2</span>
             </button>
 
-            <div className="topbar-user">
+            <div className="topbar-profile">
               <div className="topbar-avatar" style={{ background: "#059669" }}>
                 SD
               </div>
-              <div className="topbar-user-info">
-                <div className="topbar-user-name">Sunita Devi (ASHA)</div>
-                <div className="topbar-user-role">PHC Ward 3 & 4</div>
+              <div>
+                <div className="topbar-profile-name">Sunita Devi (ASHA)</div>
+                <div className="topbar-profile-role">PHC Ward 3 & 4</div>
               </div>
-              <ChevronDown style={{ width: 13, height: 13, color: "#94a3b8" }} />
+              <ChevronDown style={{ width: 12, height: 12, color: "#94a3b8", marginLeft: "0.25rem" }} />
             </div>
           </div>
         </header>
@@ -405,9 +399,9 @@ export default function AshaDashboardPage() {
                     <div className="complaints-card-title">ASHA Patient & Home Visit Registry</div>
                     <div style={{ fontSize: "0.7rem", color: "#64748b" }}>Ward 3 & 4 Active Beneficiaries</div>
                   </div>
-                  <div className="complaints-nav-btns">
-                    <button className="complaints-nav-btn"><Search style={{ width: 14, height: 14 }} /></button>
-                  </div>
+                  <span style={{ fontSize: "0.68rem", fontWeight: 800, padding: "0.2rem 0.55rem", borderRadius: "999px", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0" }}>
+                    4 Active
+                  </span>
                 </div>
 
                 {/* Patient Visit Items */}
