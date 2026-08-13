@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════
--- NIVAARAN AI — SUPABASE POSTGRESQL SCHEMA & INITIAL SEED DATA
+-- CIVIC CATALYST — SUPABASE POSTGRESQL COMPLETE DATABASE SCHEMA
 -- Copy and paste this complete SQL script into Supabase SQL Editor:
 -- https://supabase.com/dashboard/project/vgxdpcowbuharsamwbra/sql/new
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -106,7 +106,27 @@ CREATE TABLE IF NOT EXISTS public.medicine_requests (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- ── 8. Enable Row Level Security & Public API Policies ──────────────────────
+-- ── 8. Civic Complaints Table (Citizen -> Gram Panchayat Reporting) ──────────
+CREATE TABLE IF NOT EXISTS public.complaints (
+    id SERIAL PRIMARY KEY,
+    complaint_id_code VARCHAR(100) UNIQUE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(100) NOT NULL DEFAULT 'Roads & Infrastructure',
+    location VARCHAR(255) NOT NULL,
+    urgency VARCHAR(50) NOT NULL DEFAULT 'High',
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    villager_name VARCHAR(255) NOT NULL,
+    villager_id VARCHAR(100),
+    village VARCHAR(255) DEFAULT 'Shyampet',
+    image_url TEXT,
+    ai_generated BOOLEAN DEFAULT FALSE,
+    date_label VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ── 9. Enable Row Level Security & Public Access Policies ────────────────────
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
@@ -114,6 +134,7 @@ ALTER TABLE public.inventory_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.distribution_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.medicine_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.complaints ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow public access to categories" ON public.categories;
 CREATE POLICY "Allow public access to categories" ON public.categories FOR ALL USING (true) WITH CHECK (true);
@@ -133,7 +154,13 @@ CREATE POLICY "Allow public access to distribution_records" ON public.distributi
 DROP POLICY IF EXISTS "Allow public access to alerts" ON public.alerts;
 CREATE POLICY "Allow public access to alerts" ON public.alerts FOR ALL USING (true) WITH CHECK (true);
 
--- ── 8. Initial Medical Seed Data ─────────────────────────────────────────────
+DROP POLICY IF EXISTS "Allow public access to medicine_requests" ON public.medicine_requests;
+CREATE POLICY "Allow public access to medicine_requests" ON public.medicine_requests FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public access to complaints" ON public.complaints;
+CREATE POLICY "Allow public access to complaints" ON public.complaints FOR ALL USING (true) WITH CHECK (true);
+
+-- ── 10. Initial Seed Data ────────────────────────────────────────────────────
 INSERT INTO public.categories (id, name, description) VALUES
 (1, 'Medicines', 'Essential community tablets, syrups, and supplements'),
 (2, 'Maternal Health Supplies', 'Iron tablets, delivery kits, and ANC care'),
@@ -155,30 +182,6 @@ INSERT INTO public.inventory_items
 (4, 'ASH-INV-004', 'ORS & Zinc Hydration Kits', 3, 'Child Health Supplies', 'Kits', 0, 20, 150, 'BAT-ORS-2026', '2027-02-09', 2, 'PHC Central Depot', 'Out of Stock'),
 (5, 'ASH-INV-005', 'OPV Polio Vaccine Vials', 3, 'Child Health Supplies', 'Vials', 4, 15, 80, 'BAT-OPV-44', '2026-11-11', 2, 'PHC Central Depot', 'Low Stock')
 ON CONFLICT (id) DO NOTHING;
-
--- ── 9. Civic Complaints Table ────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.complaints (
-    id SERIAL PRIMARY KEY,
-    complaint_id_code VARCHAR(100) UNIQUE NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    category VARCHAR(100) NOT NULL DEFAULT 'Roads & Infrastructure',
-    location VARCHAR(255) NOT NULL,
-    urgency VARCHAR(50) NOT NULL DEFAULT 'High',
-    status VARCHAR(50) NOT NULL DEFAULT 'pending',
-    villager_name VARCHAR(255) NOT NULL,
-    villager_id VARCHAR(100),
-    village VARCHAR(255) DEFAULT 'Shyampet',
-    image_url TEXT,
-    ai_generated BOOLEAN DEFAULT FALSE,
-    date_label VARCHAR(100),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-ALTER TABLE public.complaints ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public access to complaints" ON public.complaints;
-CREATE POLICY "Allow public access to complaints" ON public.complaints FOR ALL USING (true) WITH CHECK (true);
 
 INSERT INTO public.complaints
 (complaint_id_code, title, description, category, location, urgency, status, villager_name, villager_id, village, ai_generated, date_label) VALUES
