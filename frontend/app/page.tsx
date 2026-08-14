@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSession, isVillager } from "@/services/demoSession";
+import { CivicLogo } from "@/components/CivicLogo";
 import { RoleSelector } from "@/components/RoleSelector";
-import { Leaf, Mic, MapPin, Zap, Users, Building2 } from "lucide-react";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { Zap, Users, Building2 } from "lucide-react";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -34,31 +36,28 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white flex flex-col">
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <header className="w-full px-4 py-4 flex items-center justify-between max-w-2xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-xl bg-emerald-900 flex items-center justify-center shadow-sm">
-            <Leaf className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-bold text-emerald-950 text-lg tracking-tight">
+        <div className="flex items-center gap-2.5">
+          <CivicLogo size="sm" />
+          <span className="font-extrabold text-emerald-950 text-lg tracking-tight">
             Civic Catalyst
           </span>
         </div>
-        <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-          Phase 1 Demo
-        </span>
+        <div className="flex items-center gap-2">
+          <LanguageSelector variant="landing" />
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+            Live Platform
+          </span>
+        </div>
       </header>
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <main className="flex-1 flex flex-col max-w-2xl mx-auto w-full px-4">
         {/* Hero section */}
-        <section className="pt-8 pb-10 text-center">
-          {/* Emblem */}
-          <div className="relative mx-auto mb-6 w-20 h-20">
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-800 to-emerald-950 shadow-lg shadow-emerald-900/30" />
-            <div className="absolute inset-0 rounded-2xl flex items-center justify-center">
-              <Leaf className="h-10 w-10 text-white" />
-            </div>
-            {/* Pulse ring */}
-            <div className="absolute -inset-2 rounded-[20px] border-2 border-emerald-700/40 opacity-60 animate-pulse" />
+        <section className="pt-8 pb-8 text-center">
+          {/* CS Brand Emblem */}
+          <div className="flex justify-center mb-6">
+            <CivicLogo size="hero" glow={true} />
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight mb-3">
@@ -70,23 +69,6 @@ export default function LandingPage() {
           <p className="text-slate-600 text-base max-w-md mx-auto leading-relaxed">
             Report civic problems or manage ASHA health inventory with smart AI assistance.
           </p>
-        </section>
-
-        {/* ── Feature pills ──────────────────────────────────────────────────── */}
-        <section className="flex flex-wrap justify-center gap-2 mb-10">
-          {[
-            { icon: Mic, label: "Voice & Text Reports" },
-            { icon: MapPin, label: "Location-aware" },
-            { icon: Zap, label: "AI Classification" },
-          ].map(({ icon: Icon, label }) => (
-            <div
-              key={label}
-              className="flex items-center gap-1.5 text-sm text-slate-700 bg-emerald-50/60 rounded-full px-3.5 py-1.5 border border-emerald-200"
-            >
-              <Icon className="h-3.5 w-3.5 text-emerald-800" />
-              <span>{label}</span>
-            </div>
-          ))}
         </section>
 
         {/* ── Role Selection ─────────────────────────────────────────────────── */}
@@ -141,10 +123,9 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* ── Footer ──────────────────────────────────────────────────────────── */}
       <footer className="text-center py-6 px-4 border-t border-slate-100">
         <p className="text-xs text-slate-400">
-          Civic Catalyst &nbsp;·&nbsp; Built for rural India &nbsp;·&nbsp; Hackathon Demo v0.1
+          Civic Catalyst &nbsp;·&nbsp; Built for rural India
         </p>
       </footer>
     </div>

@@ -7,8 +7,11 @@ import {
   isVillager,
   isPanchayatOfficial,
   clearSession,
+  setPanchayatSession,
+  DEMO_PANCHAYAT,
 } from "@/services/demoSession";
 import type { DemoPanchayat } from "@/types";
+import { CivicLogo } from "@/components/CivicLogo";
 import IndianNationalEmblem from "@/components/IndianNationalEmblem";
 import {
   LayoutDashboard,
@@ -57,6 +60,7 @@ import {
   type Complaint,
   type ComplaintKPIs,
 } from "@/services/complaintsApi";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 const TODAY = new Date();
 const WEEK_DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -75,7 +79,7 @@ function getWeekDates() {
 const AI_CAPABILITIES = [
   { icon: Cpu, label: "Smart Classification", desc: "AI tags by type, urgency and dept.", badge: "Live", badgeColor: "#047857", badgeBg: "#dcfce7", iconColor: "#047857", iconBg: "#ecfdf5" },
   { icon: AlertTriangle, label: "Priority Routing", desc: "Auto-escalation for critical issues.", badge: "Live", badgeColor: "#047857", badgeBg: "#dcfce7", iconColor: "#d97706", iconBg: "#fffbeb" },
-  { icon: TrendingUp, label: "Analytics", desc: "Resolution trends and heatmaps.", badge: "Phase 2", badgeColor: "#7c3aed", badgeBg: "#f3e8ff", iconColor: "#7c3aed", iconBg: "#f3e8ff" },
+  { icon: TrendingUp, label: "Analytics", desc: "Resolution trends and heatmaps.", badge: "Live", badgeColor: "#7c3aed", badgeBg: "#f3e8ff", iconColor: "#7c3aed", iconBg: "#f3e8ff" },
 ];
 
 const NAV_ITEMS = [
@@ -83,7 +87,6 @@ const NAV_ITEMS = [
   { icon: ClipboardList,  label: "Complaints",   id: "complaints",  badge: "Live" },
   { icon: BarChart3,      label: "Analytics",    id: "analytics",   badge: null },
   { icon: FileText,       label: "Reports",      id: "reports",     badge: null },
-  { icon: Map,            label: "Village Map",  id: "map",         badge: null },
   { icon: AlertTriangle,  label: "Escalations",  id: "escalations", badge: null },
 ];
 
@@ -140,13 +143,15 @@ export default function PanchayatDashboard() {
   const [searchQuery, setSearchQuery]   = useState<string>("");
 
   useEffect(() => {
-    const s = getSession();
-    if (!s) { router.replace("/"); return; }
-    if (isVillager(s)) { router.replace("/citizen/dashboard"); return; }
-    if (isPanchayatOfficial(s)) setSession(s);
+    let s = getSession();
+    if (!s || !isPanchayatOfficial(s)) {
+      setPanchayatSession();
+      s = DEMO_PANCHAYAT;
+    }
+    setSession(s as DemoPanchayat);
     setLoading(false);
     loadAllComplaints();
-  }, [router]);
+  }, []);
 
   const loadAllComplaints = async () => {
     setLoadingComplaints(true);
@@ -229,7 +234,7 @@ export default function PanchayatDashboard() {
       {/* ── SIDEBAR ──────────────────────────────────────────────────────── */}
       <aside className="panchayat-sidebar">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon"><Shield style={{ width: 16, height: 16, color: "white" }} /></div>
+          <CivicLogo size="sm" />
           <div>
             <div className="sidebar-logo-name">Civic Catalyst</div>
             <div className="sidebar-logo-version">Panchayat Portal · v1.0</div>
@@ -279,6 +284,9 @@ export default function PanchayatDashboard() {
             <input type="text" placeholder="Search complaints, citizens or locations..." className="topbar-search-input" />
           </div>
           <div className="topbar-right" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {/* Language Selector Dropdown (Google Translation) */}
+            <LanguageSelector />
+
             <button onClick={loadAllComplaints} disabled={loadingComplaints} style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#f0fdf4", border: "1px solid #a7f3d0", borderRadius: "8px", padding: "0.4rem 0.75rem", fontSize: "0.75rem", fontWeight: 700, color: "#047857", cursor: "pointer" }}>
               <RefreshCw size={13} className={loadingComplaints ? "animate-spin" : ""} />
               {loadingComplaints ? "Syncing..." : "Sync DB"}

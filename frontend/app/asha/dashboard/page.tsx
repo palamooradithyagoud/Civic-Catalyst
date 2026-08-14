@@ -11,6 +11,8 @@ import {
 } from "@/services/demoSession";
 import type { DemoAshaWorker } from "@/types";
 import { Language, translations } from "@/lib/translations";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { CivicLogo } from "@/components/CivicLogo";
 import {
   fetchDashboardKPIs,
   fetchInventoryItems,
@@ -81,6 +83,7 @@ import {
   Truck,
   Building,
   Inbox,
+  Megaphone,
 } from "lucide-react";
 
 export default function AshaInventoryDashboardPage() {
@@ -93,7 +96,7 @@ export default function AshaInventoryDashboardPage() {
 
   // Active Tab State
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "mandal" | "inventory" | "distribute" | "history" | "alerts" | "analytics" | "transactions" | "mandal_req"
+    "dashboard" | "mandal" | "inventory" | "distribute" | "history" | "alerts" | "analytics" | "transactions" | "mandal_req" | "vaccines"
   >("dashboard");
 
   // Language State (English, Hindi, Telugu)
@@ -172,6 +175,72 @@ export default function AshaInventoryDashboardPage() {
     reason: "",
     notes: "",
   });
+
+  // Vaccine & Pulse Polio Drive State
+  const [isRecordVaccineOpen, setIsRecordVaccineOpen] = useState(false);
+  const [polioStats, setPolioStats] = useState({
+    todayAdministered: 148,
+    targetChildren: 160,
+    activeCampaign: "National Pulse Polio Drive (NID)",
+    coldChainTemp: "+4.2°C",
+    bopvVials: 45,
+    ipvVials: 30,
+  });
+
+  const [immunizationRecords, setImmunizationRecords] = useState([
+    { id: "POLIO-2026-001", child_name: "Ananya Reddy", parent_name: "Suresh Reddy", age: "2 Yrs", ward: "Ward 3 Central Village", vaccine: "bOPV (Pulse Polio Drops)", dose: "Dose 3", status: "Given Today", administered_by: "Sunita Devi (ASHA)", finger_marked: true, time: "Today, 09:15 AM" },
+    { id: "POLIO-2026-002", child_name: "Vivaan Sharma", parent_name: "Ramesh Sharma", age: "9 Months", ward: "Ward 1 North Block", vaccine: "bOPV + IPV (Polio Drops & Inj)", dose: "Dose 2 + IPV 1", status: "Given Today", administered_by: "Sunita Devi (ASHA)", finger_marked: true, time: "Today, 09:45 AM" },
+    { id: "POLIO-2026-003", child_name: "Kavya Sri", parent_name: "Mahesh Kumar", age: "1.5 Yrs", ward: "Ward 2 East Block", vaccine: "bOPV (Pulse Polio Drops)", dose: "Dose 3", status: "Given Today", administered_by: "Sunita Devi (ASHA)", finger_marked: true, time: "Today, 10:20 AM" },
+    { id: "POLIO-2026-004", child_name: "Rahul Varma", parent_name: "Venkat Varma", age: "3 Yrs", ward: "Ward 3 Central Village", vaccine: "bOPV (Pulse Polio Drops)", dose: "Booster 1", status: "Given Today", administered_by: "Sunita Devi (ASHA)", finger_marked: true, time: "Today, 11:05 AM" },
+    { id: "POLIO-2026-005", child_name: "Karthik Goud", parent_name: "Shekar Goud", age: "4 Yrs", ward: "Ward 4 South Colony", vaccine: "bOPV (Pulse Polio Drops)", dose: "Booster 2", status: "Scheduled", administered_by: "Sunita Devi (ASHA)", finger_marked: false, time: "Scheduled 02:00 PM" },
+  ]);
+
+  const [newVaccineForm, setNewVaccineForm] = useState({
+    child_name: "",
+    parent_name: "",
+    age: "2 Yrs",
+    ward: "Ward 3 Central Village",
+    vaccine: "bOPV (Pulse Polio Drops)",
+    dose: "Dose 3",
+    finger_marked: true,
+    notes: "",
+  });
+
+  // Public Health Announcement Broadcast State
+  const [isPostAnnouncementOpen, setIsPostAnnouncementOpen] = useState(false);
+  const [ashaAnnouncements, setAshaAnnouncements] = useState([
+    {
+      id: "ANNC-2026-001",
+      title: "📢 National Pulse Polio Drive Active Today!",
+      category: "Polio Vaccination",
+      location: "Ward 3 PHC Sub-Center & Door-to-Door",
+      message: "Special Pulse Polio booth is active today. All children aged 0-5 years must receive 2 oral polio drops. ASHA workers are visiting homes.",
+      priority: "Urgent",
+      posted_by: "Sunita Devi (ASHA Worker)",
+      created_at: "Today, 08:30 AM",
+      unread: true,
+    }
+  ]);
+  const [announcementForm, setAnnouncementForm] = useState({
+    title: "📢 National Pulse Polio Drive Active Today!",
+    category: "Polio Vaccination",
+    location: "All Wards / Village PHC Sub-Center",
+    message: "Special Pulse Polio booth is active today. All children aged 0-5 years must receive 2 oral polio drops. Please visit the local sub-center!",
+    priority: "Urgent",
+  });
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("civic_asha_announcements");
+      if (stored) {
+        setAshaAnnouncements(JSON.parse(stored));
+      } else {
+        localStorage.setItem("civic_asha_announcements", JSON.stringify(ashaAnnouncements));
+      }
+    } catch (e) {
+      console.warn("Storage err", e);
+    }
+  }, []);
 
   // Mandal Decision Action Modal State
   const [mandalActionModal, setMandalActionModal] = useState<{
@@ -407,6 +476,38 @@ export default function AshaInventoryDashboardPage() {
     });
   }, [items, searchQuery, selectedCategory, selectedStatus]);
 
+  // Sorted Medicine Requests (Pending & Newly created at TOP)
+  const sortedMedicineRequests = useMemo(() => {
+    const statusPriority: Record<string, number> = {
+      PENDING: 1,
+      UNDER_REVIEW: 1,
+      NEW: 1,
+      REQUESTED: 1,
+      APPROVED: 2,
+      PARTIALLY_APPROVED: 2,
+      DISPATCHED: 3,
+      RECEIVED: 4,
+      REJECTED: 5,
+    };
+    return [...medicineRequests].sort((a, b) => {
+      const statusA = (a.status || "").trim().toUpperCase();
+      const statusB = (b.status || "").trim().toUpperCase();
+      const prioA = statusPriority[statusA] ?? 99;
+      const prioB = statusPriority[statusB] ?? 99;
+      if (prioA !== prioB) return prioA - prioB;
+
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+
+      if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+        return timeB - timeA;
+      }
+      const numIdA = typeof a.id === "number" ? a.id : parseInt(String(a.id || "0").replace(/\D/g, "") || "0", 10);
+      const numIdB = typeof b.id === "number" ? b.id : parseInt(String(b.id || "0").replace(/\D/g, "") || "0", 10);
+      return numIdB - numIdA;
+    });
+  }, [medicineRequests]);
+
   // Selected Item for Distribute Form in Distribute Tab
   const selectedDistributeItem = useMemo(() => {
     return items.find((i) => i.id === distributeForm.item_id) || items[0];
@@ -445,9 +546,7 @@ export default function AshaInventoryDashboardPage() {
       <aside className="panchayat-sidebar">
         {/* Brand Header */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon" style={{ background: portalMode === "mandal" ? "linear-gradient(135deg, #0f766e, #0d9488)" : "linear-gradient(135deg, #047857, #10b981)" }}>
-            {portalMode === "mandal" ? <Hospital style={{ width: 20, height: 20, color: "#ffffff" }} /> : <Package style={{ width: 20, height: 20, color: "#ffffff" }} />}
-          </div>
+          <CivicLogo size="sm" />
           <div>
             <div className="sidebar-logo-name" style={{ fontSize: "1.05rem" }}>
               {portalMode === "mandal" ? "Mandal Health HQ" : t("systemTitle")}
@@ -466,12 +565,14 @@ export default function AshaInventoryDashboardPage() {
           {(portalMode === "mandal"
             ? [
                 { id: "mandal", label: "ASHA Requests & Shortages", icon: Inbox, badge: medicineRequests.filter(r => r.status === "PENDING").length, alert: medicineRequests.filter(r => r.status === "PENDING").length > 0 },
+                { id: "vaccines", label: "Vaccine Depot & Cold Chain", icon: Syringe, badge: polioStats.bopvVials + polioStats.ipvVials, alert: false },
                 { id: "transactions", label: "Dispatched Delivery Logs", icon: Truck, badge: transactions.length },
                 { id: "alerts", label: "Village Stock Alerts", icon: AlertTriangle, badge: alerts.length, alert: alerts.length > 0 },
               ]
             : [
                 { id: "dashboard", label: t("navDashboard"), icon: LayoutDashboard, badge: null },
-                { id: "mandal_req", label: "Request Medicine (మండల్ HQ)", icon: Inbox, badge: medicineRequests.filter(r => r.status === "PENDING" || r.status === "DISPATCHED").length, alert: medicineRequests.filter(r => r.status === "DISPATCHED").length > 0 },
+                { id: "vaccines", label: "Vaccines & Polio", icon: Syringe, badge: "Active", alert: true },
+                { id: "mandal_req", label: "Request Medicine", icon: Inbox, badge: medicineRequests.filter(r => r.status === "PENDING" || r.status === "DISPATCHED").length, alert: medicineRequests.filter(r => r.status === "DISPATCHED").length > 0 },
                 { id: "inventory", label: t("navInventory"), icon: Package, badge: items.length },
                 { id: "distribute", label: t("navDistribute"), icon: SendHorizontal, badge: null },
                 { id: "history", label: t("navHistory"), icon: History, badge: distributions.length },
@@ -538,6 +639,7 @@ export default function AshaInventoryDashboardPage() {
             <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#0f172a" }}>
               {activeTab === "dashboard" && (portalMode === "mandal" ? "Mandal Hospital HQ" : t("tabDashboard"))}
               {activeTab === "mandal" && "Mandal Hospital Office"}
+              {activeTab === "vaccines" && "Vaccines & Pulse Polio Immunization Tracker"}
               {activeTab === "inventory" && t("tabInventory")}
               {activeTab === "distribute" && t("tabDistribute")}
               {activeTab === "history" && t("tabHistory")}
@@ -566,27 +668,32 @@ export default function AshaInventoryDashboardPage() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            {/* Language Selector Dropdown */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#f8fafc", padding: "0.35rem 0.65rem", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
-              <Globe size={15} style={{ color: "#047857" }} />
-              <select
-                value={lang}
-                onChange={(e) => changeLanguage(e.target.value as Language)}
+            {/* Language Selector Dropdown (Google Translation) */}
+            <LanguageSelector onLanguageChange={(l) => setLang(l as Language)} />
+
+            {/* Broadcast Announcement Button (ASHA Village Mode Only) */}
+            {portalMode !== "mandal" && (
+              <button
+                onClick={() => setIsPostAnnouncementOpen(true)}
                 style={{
-                  background: "transparent",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  background: "linear-gradient(135deg, #0d9488, #0f766e)",
+                  color: "white",
                   border: "none",
+                  padding: "0.4rem 0.85rem",
+                  borderRadius: "8px",
                   fontSize: "0.78rem",
-                  fontWeight: 800,
-                  color: "#0f172a",
-                  outline: "none",
+                  fontWeight: 900,
                   cursor: "pointer",
+                  boxShadow: "0 2px 8px rgba(13,148,136,0.3)"
                 }}
               >
-                <option value="en">🇬🇧 English</option>
-                <option value="hi">🇮🇳 हिंदी (Hindi)</option>
-                <option value="te">🇮🇳 తెలుగు (Telugu)</option>
-              </select>
-            </div>
+                <Megaphone size={16} />
+                <span>📢 Post Broadcast to Citizens</span>
+              </button>
+            )}
 
             {/* Portal Switcher Pill */}
             <button
@@ -758,7 +865,7 @@ export default function AshaInventoryDashboardPage() {
                   </div>
                 </div>
 
-                {medicineRequests.length === 0 ? (
+                {sortedMedicineRequests.length === 0 ? (
                   <div style={{ padding: "2rem", textAlign: "center", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0", color: "#64748b", fontSize: "0.85rem" }}>
                     No pending medicine requests from ASHA workers at this moment.
                   </div>
@@ -779,7 +886,7 @@ export default function AshaInventoryDashboardPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {medicineRequests.map((r) => {
+                        {sortedMedicineRequests.map((r) => {
                           const isPending = r.status === "PENDING" || r.status === "UNDER_REVIEW";
                           const isApproved = r.status === "APPROVED" || r.status === "PARTIALLY_APPROVED";
                           const isDispatched = r.status === "DISPATCHED";
@@ -1969,14 +2076,14 @@ export default function AshaInventoryDashboardPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {medicineRequests.length === 0 ? (
+                      {sortedMedicineRequests.length === 0 ? (
                         <tr>
                           <td colSpan={9} style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>
                             No medicine requisitions submitted yet. Click <strong>+ Request Medicine</strong> above to create a new requisition.
                           </td>
                         </tr>
                       ) : (
-                        medicineRequests.map((r) => {
+                        sortedMedicineRequests.map((r) => {
                           const isPending = r.status === "PENDING" || r.status === "UNDER_REVIEW";
                           const isApproved = r.status === "APPROVED" || r.status === "PARTIALLY_APPROVED";
                           const isDispatched = r.status === "DISPATCHED";
@@ -2070,10 +2177,254 @@ export default function AshaInventoryDashboardPage() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
+            {/* ── TAB 8: VACCINES & PULSE POLIO TRACKER ──────────────────────── */}
+          {activeTab === "vaccines" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              {/* Header Banner */}
+              <div
+                style={{
+                  background: "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
+                  borderRadius: "16px",
+                  padding: "1.5rem",
+                  color: "white",
+                  boxShadow: "0 10px 30px rgba(13, 148, 136, 0.25)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "1rem",
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+                    <span style={{ background: "rgba(255,255,255,0.2)", padding: "0.2rem 0.65rem", borderRadius: "999px", fontSize: "0.7rem", fontWeight: 800, textTransform: "uppercase" }}>
+                      💉 Universal Immunization Program (UIP)
+                    </span>
+                    <span style={{ background: "#fef08a", color: "#854d0e", padding: "0.2rem 0.65rem", borderRadius: "999px", fontSize: "0.7rem", fontWeight: 800 }}>
+                      🟢 National Pulse Polio Drive Active
+                    </span>
+                  </div>
+                  <h2 style={{ fontSize: "1.45rem", fontWeight: 900, margin: 0 }}>
+                    Vaccines & Pulse Polio Campaign Tracker (టీకాలు & పోలియో చుక్కల పోర్టల్)
+                  </h2>
+                  <p style={{ fontSize: "0.82rem", opacity: 0.9, marginTop: "0.3rem" }}>
+                    Track 0-5 years child polio doses, finger indelible marking, UIP vaccine cold chain temperature & stock levels across village sub-centers.
+                  </p>
+                </div>
 
-      {/* ── MODAL 1: ADD NEW ITEM MODAL ─────────────────────── */}
+                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => setIsRecordVaccineOpen(true)}
+                    style={{ background: "#ffffff", color: "#0f766e", border: "none", padding: "0.65rem 1.1rem", borderRadius: "10px", fontSize: "0.82rem", fontWeight: 900, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.4rem", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}
+                  >
+                    <Syringe size={18} />
+                    <span>+ Record Polio Vaccination (చుక్కలు నమోదు)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Polio Campaign KPI Cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
+                <div style={{ background: "#f0fdf4", padding: "1.1rem", borderRadius: "14px", border: "1px solid #bbf7d0" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#166534" }}>💉 Polio Drops Administered Today</div>
+                  <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "#047857", marginTop: "0.2rem" }}>
+                    {polioStats.todayAdministered} Children
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "#15803d", fontWeight: 700 }}>bOPV Oral Polio Drops</div>
+                </div>
+
+                <div style={{ background: "#eff6ff", padding: "1.1rem", borderRadius: "14px", border: "1px solid #bfdbfe" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#1e40af" }}>🎯 Target Children (0-5 Yrs)</div>
+                  <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "#1d4ed8", marginTop: "0.2rem" }}>
+                    {polioStats.targetChildren} Target
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "#2563eb", fontWeight: 700 }}>
+                    {((polioStats.todayAdministered / polioStats.targetChildren) * 100).toFixed(1)}% Campaign Coverage
+                  </div>
+                </div>
+
+                <div style={{ background: "#f0fdfa", padding: "1.1rem", borderRadius: "14px", border: "1px solid #99f6e4" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#0f766e" }}>❄️ Cold Chain Storage Temp</div>
+                  <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "#0d9488", marginTop: "0.2rem" }}>
+                    {polioStats.coldChainTemp}
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "#115e59", fontWeight: 700 }}>Optimal Range: +2°C to +8°C</div>
+                </div>
+
+                <div style={{ background: "#fffbe8", padding: "1.1rem", borderRadius: "14px", border: "1px solid #fde68a" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#92400e" }}>🧪 Polio Vials Available</div>
+                  <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "#d97706", marginTop: "0.2rem" }}>
+                    {polioStats.bopvVials} bOPV + {polioStats.ipvVials} IPV
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "#b45309", fontWeight: 700 }}>900 Oral Doses + 300 Inj Doses</div>
+                </div>
+              </div>
+
+              {/* ── SECTION 1: TODAY'S PULSE POLIO BENEFICIARIES LOG ── */}
+              <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", border: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", borderBottom: "1px solid #f1f5f9", paddingBottom: "0.75rem", flexWrap: "wrap", gap: "0.75rem" }}>
+                  <div>
+                    <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <Syringe size={20} style={{ color: "#0d9488" }} />
+                      👶 Today's Pulse Polio Drive Beneficiaries & Immunization Field Log
+                    </div>
+                    <div style={{ fontSize: "0.78rem", color: "#64748b", marginTop: "0.2rem" }}>
+                      Real-time register of children (0-5 years) administered Polio drops & finger-marked during booth & door-to-door drive.
+                    </div>
+                  </div>
+
+                  <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#0d9488", background: "#f0fdfa", border: "1px solid #99f6e4", padding: "0.25rem 0.75rem", borderRadius: "999px" }}>
+                    ✓ Booth #3 Ward 3 Live
+                  </span>
+                </div>
+
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#475569", textAlign: "left" }}>
+                        <th style={{ padding: "0.75rem 1rem" }}>Record ID</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Child Name & Age</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Parent / Guardian</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Ward / Village</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Vaccine & Dose</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Finger Marked</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Status</th>
+                        <th style={{ padding: "0.75rem 1rem", textAlign: "right" }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {immunizationRecords.map((r) => {
+                        const isGiven = r.status === "Given Today";
+                        return (
+                          <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "0.75rem 1rem", fontWeight: 800, color: "#0d9488", fontFamily: "monospace" }}>
+                              {r.id}
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem" }}>
+                              <div style={{ fontWeight: 800, color: "#0f172a" }}>{r.child_name}</div>
+                              <div style={{ fontSize: "0.7rem", color: "#64748b" }}>Age: {r.age}</div>
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem", color: "#334155", fontWeight: 600 }}>
+                              {r.parent_name}
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem", color: "#64748b" }}>
+                              {r.ward}
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem" }}>
+                              <div style={{ fontWeight: 800, color: "#047857" }}>{r.vaccine}</div>
+                              <div style={{ fontSize: "0.7rem", color: "#64748b" }}>{r.dose}</div>
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem" }}>
+                              <span style={{
+                                fontSize: "0.72rem",
+                                fontWeight: 800,
+                                padding: "0.15rem 0.55rem",
+                                borderRadius: "999px",
+                                background: r.finger_marked ? "#ecfdf5" : "#fffbe8",
+                                color: r.finger_marked ? "#047857" : "#b45309",
+                                border: r.finger_marked ? "1px solid #a7f3d0" : "1px solid #fde68a",
+                              }}>
+                                {r.finger_marked ? "✓ Marked Ink" : "⏳ Pending Ink"}
+                              </span>
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem" }}>
+                              <span style={{
+                                fontSize: "0.72rem",
+                                fontWeight: 800,
+                                padding: "0.2rem 0.65rem",
+                                borderRadius: "999px",
+                                background: isGiven ? "#dcfce7" : "#fffbe8",
+                                color: isGiven ? "#15803d" : "#d97706",
+                                border: isGiven ? "1px solid #86efac" : "1px solid #fde68a",
+                              }}>
+                                {r.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: "0.75rem 1rem", textAlign: "right" }}>
+                              {!isGiven ? (
+                                <button
+                                  onClick={() => {
+                                    setImmunizationRecords(prev => prev.map(item => item.id === r.id ? { ...item, status: "Given Today", finger_marked: true, time: "Today, Just Now" } : item));
+                                    setPolioStats(prev => ({ ...prev, todayAdministered: prev.todayAdministered + 1 }));
+                                    showToast(`✓ Polio Oral Drops administered to ${r.child_name}! Finger marked.`);
+                                  }}
+                                  style={{ background: "#047857", color: "white", border: "none", padding: "0.35rem 0.7rem", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer" }}
+                                >
+                                  ✓ Administer Drops
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: "0.72rem", color: "#15803d", fontWeight: 800 }}>
+                                  ✓ Completed ({r.time})
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* ── SECTION 2: UIP VACCINES & COLD CHAIN MASTER CATALOG ── */}
+              <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", border: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
+                  <div>
+                    <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <Package size={20} style={{ color: "#047857" }} />
+                      Universal Immunization Program (UIP) Cold Chain Vaccines Catalog
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.15rem" }}>
+                      Master vaccine stock levels, cold chain storage limits, and batch expiry tracking for PHC & Village Sub-Center.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0", textTransform: "uppercase", fontSize: "0.7rem", color: "#64748b", fontWeight: 800 }}>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "left" }}>Vaccine Name</th>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "left" }}>Target Group</th>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "left" }}>Cold Chain Temperature</th>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "center" }}>Vials / Stock</th>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "center" }}>Batch & Expiry</th>
+                        <th style={{ padding: "0.75rem 0.85rem", textAlign: "right" }}>Stock Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { name: "bOPV (Bivalent Oral Polio Vaccine)", target: "Children 0-5 Years", temp: "-20°C to +8°C (Carrier Box)", stock: "45 Vials (900 doses)", batch: "BAT-OPV-992", exp: "2027-08-31", status: "🟢 Optimal Stock" },
+                        { name: "IPV (Inactivated Polio Vaccine)", target: "Infants 14 Wks & 9 Mos", temp: "+2°C to +8°C (Ice Lined Refrigerator)", stock: "30 Vials (300 doses)", batch: "BAT-IPV-441", exp: "2027-06-30", status: "🟢 Optimal Stock" },
+                        { name: "BCG Vaccine (Tuberculosis)", target: "Newborns at Birth", temp: "+2°C to +8°C", stock: "15 Vials (300 doses)", batch: "BAT-BCG-102", exp: "2027-04-15", status: "🟢 Optimal Stock" },
+                        { name: "Pentavalent (DPT + HepB + Hib)", target: "Infants 6, 10, 14 Weeks", temp: "+2°C to +8°C", stock: "25 Vials (250 doses)", batch: "BAT-PENTA-883", exp: "2027-11-20", status: "🟢 Optimal Stock" },
+                        { name: "Measles-Rubella (MR) Vaccine", target: "Infants 9 & 16 Months", temp: "+2°C to +8°C", stock: "8 Vials (80 doses)", batch: "BAT-MR-502", exp: "2026-12-31", status: "⚡ Low Stock" },
+                        { name: "Rotavirus Vaccine (RVV Drops)", target: "Infants 6, 10, 14 Weeks", temp: "+2°C to +8°C", stock: "20 Vials (100 doses)", batch: "BAT-RVV-331", exp: "2027-09-15", status: "🟢 Optimal Stock" },
+                        { name: "TT / Td Vaccine (Tetanus)", target: "Pregnant Women & Adolescents", temp: "+2°C to +8°C", stock: "40 Vials (400 doses)", batch: "BAT-TT-601", exp: "2028-02-28", status: "🟢 Optimal Stock" },
+                      ].map((v, idx) => (
+                        <tr key={idx} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                          <td style={{ padding: "0.75rem 0.85rem", fontWeight: 800, color: "#0f172a" }}>{v.name}</td>
+                          <td style={{ padding: "0.75rem 0.85rem", color: "#475569", fontWeight: 600 }}>{v.target}</td>
+                          <td style={{ padding: "0.75rem 0.85rem", color: "#0f766e", fontWeight: 700 }}>{v.temp}</td>
+                          <td style={{ padding: "0.75rem 0.85rem", textAlign: "center", fontWeight: 800, color: "#047857" }}>{v.stock}</td>
+                          <td style={{ padding: "0.75rem 0.85rem", textAlign: "center", color: "#64748b" }}>{v.batch} · Exp: {v.exp}</td>
+                          <td style={{ padding: "0.75rem 0.85rem", textAlign: "right" }}>
+                            <span style={{ padding: "0.2rem 0.6rem", borderRadius: "999px", fontSize: "0.7rem", fontWeight: 800, background: v.status.includes("Low") ? "#fffbe8" : "#ecfdf5", color: v.status.includes("Low") ? "#d97706" : "#047857", border: v.status.includes("Low") ? "1px solid #fde68a" : "1px solid #a7f3d0" }}>
+                              {v.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+          {/* ── MODAL 1: ADD NEW ITEM MODAL ─────────────────────── */}
       {isAddItemOpen && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
           <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", width: "100%", maxWidth: "560px", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
@@ -2367,7 +2718,10 @@ export default function AshaInventoryDashboardPage() {
                     reason: "",
                     notes: "",
                   });
-                  loadAllData();
+                  if (res.request) {
+                    setMedicineRequests((prev) => [res.request, ...prev.filter(r => r.id !== res.request.id && r.request_id !== res.request.request_id)]);
+                  }
+                  await loadAllData();
                 } catch (err: any) {
                   showToast(err.message || "Failed to create medicine request", "error");
                 }
@@ -2537,6 +2891,311 @@ export default function AshaInventoryDashboardPage() {
                 </button>
                 <button type="submit" style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: mandalActionModal.actionType === "PARTIAL" ? "#ea580c" : "#dc2626", border: "none", fontSize: "0.82rem", fontWeight: 800, color: "white", cursor: "pointer" }}>
                   Confirm {mandalActionModal.actionType === "PARTIAL" ? "Partial Approval" : "Rejection"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 6: RECORD POLIO VACCINATION MODAL ─────────────────────── */}
+      {isRecordVaccineOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", width: "100%", maxWidth: "520px", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid #e2e8f0", paddingBottom: "0.75rem" }}>
+              <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <Syringe size={20} style={{ color: "#0d9488" }} />
+                💉 Record Polio Vaccination (చుక్కల నమోదు)
+              </div>
+              <button onClick={() => setIsRecordVaccineOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newVaccineForm.child_name.trim()) {
+                  showToast("Please enter child name", "error");
+                  return;
+                }
+                const nextId = `POLIO-2026-${String(immunizationRecords.length + 1).padStart(3, "0")}`;
+                const newRec = {
+                  id: nextId,
+                  child_name: newVaccineForm.child_name,
+                  parent_name: newVaccineForm.parent_name || "Guardian",
+                  age: newVaccineForm.age,
+                  ward: newVaccineForm.ward,
+                  vaccine: newVaccineForm.vaccine,
+                  dose: newVaccineForm.dose,
+                  status: "Given Today",
+                  administered_by: "Sunita Devi (ASHA)",
+                  finger_marked: newVaccineForm.finger_marked,
+                  time: "Today, Just Now",
+                };
+                setImmunizationRecords(prev => [newRec, ...prev]);
+                setPolioStats(prev => ({ ...prev, todayAdministered: prev.todayAdministered + 1 }));
+                setIsRecordVaccineOpen(false);
+                setNewVaccineForm({
+                  child_name: "",
+                  parent_name: "",
+                  age: "2 Yrs",
+                  ward: "Ward 3 Central Village",
+                  vaccine: "bOPV (Pulse Polio Drops)",
+                  dose: "Dose 3",
+                  finger_marked: true,
+                  notes: "",
+                });
+                showToast(`✓ Polio Vaccination recorded for ${newVaccineForm.child_name}! Finger marked.`);
+              }}
+              style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}
+            >
+              <div>
+                <label style={{ fontSize: "0.8rem", fontWeight: 800, color: "#334155" }}>
+                  Child Name (పిల్లల పేరు) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Sai Teja, Ananya, Rahul"
+                  value={newVaccineForm.child_name}
+                  onChange={(e) => setNewVaccineForm((prev) => ({ ...prev, child_name: e.target.value }))}
+                  style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.85rem", outline: "none", marginTop: "0.2rem" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Parent / Guardian Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Suresh Kumar"
+                    value={newVaccineForm.parent_name}
+                    onChange={(e) => setNewVaccineForm((prev) => ({ ...prev, parent_name: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Age (0 - 5 Years) *</label>
+                  <select
+                    value={newVaccineForm.age}
+                    onChange={(e) => setNewVaccineForm((prev) => ({ ...prev, age: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white", marginTop: "0.2rem" }}
+                  >
+                    <option value="Newborn (At Birth)">Newborn (At Birth)</option>
+                    <option value="6 Weeks">6 Weeks</option>
+                    <option value="10 Weeks">10 Weeks</option>
+                    <option value="14 Weeks">14 Weeks</option>
+                    <option value="9 Months">9 Months</option>
+                    <option value="1.5 Yrs">1.5 Yrs</option>
+                    <option value="2 Yrs">2 Yrs</option>
+                    <option value="3 Yrs">3 Yrs</option>
+                    <option value="4 Yrs">4 Yrs</option>
+                    <option value="5 Yrs">5 Yrs</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Ward / Location *</label>
+                  <select
+                    value={newVaccineForm.ward}
+                    onChange={(e) => setNewVaccineForm((prev) => ({ ...prev, ward: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white", marginTop: "0.2rem" }}
+                  >
+                    <option value="Ward 1 North Block">Ward 1 North Block</option>
+                    <option value="Ward 2 East Block">Ward 2 East Block</option>
+                    <option value="Ward 3 Central Village">Ward 3 Central Village</option>
+                    <option value="Ward 4 South Colony">Ward 4 South Colony</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Vaccine Type *</label>
+                  <select
+                    value={newVaccineForm.vaccine}
+                    onChange={(e) => setNewVaccineForm((prev) => ({ ...prev, vaccine: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white", marginTop: "0.2rem" }}
+                  >
+                    <option value="bOPV (Pulse Polio Drops)">bOPV (Pulse Polio Drops)</option>
+                    <option value="bOPV + IPV (Polio Drops & Inj)">bOPV + IPV (Polio Drops & Inj)</option>
+                    <option value="Pentavalent (DPT+HepB+Hib)">Pentavalent (DPT+HepB+Hib)</option>
+                    <option value="BCG (Tuberculosis)">BCG (Tuberculosis)</option>
+                    <option value="MR (Measles-Rubella)">MR (Measles-Rubella)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", background: "#f0fdfa", padding: "0.75rem", borderRadius: "10px", border: "1px solid #99f6e4" }}>
+                <input
+                  type="checkbox"
+                  id="finger_marked"
+                  checked={newVaccineForm.finger_marked}
+                  onChange={(e) => setNewVaccineForm((prev) => ({ ...prev, finger_marked: e.target.checked }))}
+                  style={{ width: 18, height: 18, accentColor: "#0f766e", cursor: "pointer" }}
+                />
+                <label htmlFor="finger_marked" style={{ fontSize: "0.82rem", fontWeight: 800, color: "#0f766e", cursor: "pointer" }}>
+                  ✓ Left Little Finger Marked with Indelible Marker Ink (వేలికి గుర్తు వేయబడింది)
+                </label>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button type="button" onClick={() => setIsRecordVaccineOpen(false)} style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#f1f5f9", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "#475569", cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button type="submit" style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#0d9488", border: "none", fontSize: "0.82rem", fontWeight: 900, color: "white", cursor: "pointer" }}>
+                  ✓ Confirm & Save Dose
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 7: POST PUBLIC HEALTH ANNOUNCEMENT MODAL ───────────── */}
+      {isPostAnnouncementOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ background: "#ffffff", borderRadius: "16px", padding: "1.5rem", width: "100%", maxWidth: "520px", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid #e2e8f0", paddingBottom: "0.75rem" }}>
+              <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <Megaphone size={20} style={{ color: "#0d9488" }} />
+                📢 Broadcast Health Announcement to Citizens
+              </div>
+              <button onClick={() => setIsPostAnnouncementOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: "0.78rem", color: "#64748b", marginTop: "-0.5rem", marginBottom: "1rem" }}>
+              Publish official health alerts, vaccine drive notices & medical camps live to all citizen mobile & web dashboards.
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!announcementForm.title.trim() || !announcementForm.message.trim()) {
+                  showToast("Please enter announcement title & message", "error");
+                  return;
+                }
+                const newAnnc = {
+                  id: `ANNC-2026-${String(ashaAnnouncements.length + 1).padStart(3, "0")}`,
+                  title: announcementForm.title,
+                  category: announcementForm.category,
+                  location: announcementForm.location,
+                  message: announcementForm.message,
+                  priority: announcementForm.priority,
+                  posted_by: "Sunita Devi (ASHA Worker)",
+                  created_at: "Just Now, Today",
+                  unread: true,
+                };
+                const updated = [newAnnc, ...ashaAnnouncements];
+                setAshaAnnouncements(updated);
+                try {
+                  localStorage.setItem("civic_asha_announcements", JSON.stringify(updated));
+                  window.dispatchEvent(new Event("asha_announcement_posted"));
+                } catch (err) {
+                  console.warn("Storage err", err);
+                }
+                setIsPostAnnouncementOpen(false);
+                showToast("📢 Health Announcement broadcast live to all Citizen dashboards!");
+              }}
+              style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}
+            >
+              <div>
+                <label style={{ fontSize: "0.8rem", fontWeight: 800, color: "#334155" }}>
+                  Announcement Title (ప్రకటన శీర్షిక) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 📢 Pulse Polio Drive Active Today, Free Eye Camp"
+                  value={announcementForm.title}
+                  onChange={(e) => setAnnouncementForm((prev) => ({ ...prev, title: e.target.value }))}
+                  style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.85rem", outline: "none", marginTop: "0.2rem" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Category *</label>
+                  <select
+                    value={announcementForm.category}
+                    onChange={(e) => setAnnouncementForm((prev) => ({ ...prev, category: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white", marginTop: "0.2rem" }}
+                  >
+                    <option value="Polio Vaccination">Polio Vaccination</option>
+                    <option value="Maternal & Child Health">Maternal & Child Health</option>
+                    <option value="Free Health Camp">Free Health Camp</option>
+                    <option value="Dengue/Malaria Warning">Dengue/Malaria Warning</option>
+                    <option value="General Health Notice">General Health Notice</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Target Village / Ward *</label>
+                  <select
+                    value={announcementForm.location}
+                    onChange={(e) => setAnnouncementForm((prev) => ({ ...prev, location: e.target.value }))}
+                    style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", background: "white", marginTop: "0.2rem" }}
+                  >
+                    <option value="All Wards / Village PHC Sub-Center">All Wards / Village PHC</option>
+                    <option value="Ward 1 North Block">Ward 1 North Block</option>
+                    <option value="Ward 2 East Block">Ward 2 East Block</option>
+                    <option value="Ward 3 Central Village">Ward 3 Central Village</option>
+                    <option value="Ward 4 South Colony">Ward 4 South Colony</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>Priority Level *</label>
+                <div style={{ display: "flex", gap: "1rem", marginTop: "0.25rem" }}>
+                  <label style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontWeight: 700, color: "#dc2626" }}>
+                    <input
+                      type="radio"
+                      name="priority"
+                      value="Urgent"
+                      checked={announcementForm.priority === "Urgent"}
+                      onChange={() => setAnnouncementForm((prev) => ({ ...prev, priority: "Urgent" }))}
+                    />
+                    🔴 Urgent Broadcast (Red Alert Banner)
+                  </label>
+                  <label style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontWeight: 700, color: "#0d9488" }}>
+                    <input
+                      type="radio"
+                      name="priority"
+                      value="Normal"
+                      checked={announcementForm.priority === "Normal"}
+                      onChange={() => setAnnouncementForm((prev) => ({ ...prev, priority: "Normal" }))}
+                    />
+                    🟢 General Notice
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "0.8rem", fontWeight: 800, color: "#334155" }}>
+                  Announcement Message & Instructions *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Provide instructions for villagers e.g. Bring children aged 0-5 for 2 oral polio drops at PHC center from 7 AM to 5 PM."
+                  value={announcementForm.message}
+                  onChange={(e) => setAnnouncementForm((prev) => ({ ...prev, message: e.target.value }))}
+                  style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.82rem", outline: "none", marginTop: "0.2rem", resize: "none" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button type="button" onClick={() => setIsPostAnnouncementOpen(false)} style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "#f1f5f9", border: "none", fontSize: "0.82rem", fontWeight: 700, color: "#475569", cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button type="submit" style={{ flex: 1, padding: "0.65rem", borderRadius: "8px", background: "linear-gradient(135deg, #0d9488, #0f766e)", border: "none", fontSize: "0.82rem", fontWeight: 900, color: "white", cursor: "pointer", boxShadow: "0 4px 12px rgba(13,148,136,0.3)" }}>
+                  📢 Publish & Broadcast Live
                 </button>
               </div>
             </form>

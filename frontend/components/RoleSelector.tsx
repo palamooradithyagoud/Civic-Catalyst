@@ -131,13 +131,6 @@ export function RoleSelector() {
         </div>
       </div>
 
-      {/* Demo notice */}
-      <div className="flex items-start gap-2 pt-1 px-1">
-        <ShieldCheck className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
-        <p className="text-xs text-slate-500">
-          This is a demo environment. No account required.
-        </p>
-      </div>
     </div>
   );
 }

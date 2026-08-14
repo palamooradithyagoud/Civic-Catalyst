@@ -649,7 +649,37 @@ export async function fetchMedicineRequests(): Promise<MedicineRequest[]> {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`Supabase medicine requests fetch error: ${error.message}`);
-  return (data || []) as MedicineRequest[];
+  
+  const statusPriority: Record<string, number> = {
+    PENDING: 1,
+    UNDER_REVIEW: 1,
+    NEW: 1,
+    REQUESTED: 1,
+    APPROVED: 2,
+    PARTIALLY_APPROVED: 2,
+    DISPATCHED: 3,
+    RECEIVED: 4,
+    REJECTED: 5,
+  };
+
+  const list = (data || []) as MedicineRequest[];
+  return list.sort((a, b) => {
+    const statusA = (a.status || "").trim().toUpperCase();
+    const statusB = (b.status || "").trim().toUpperCase();
+    const prioA = statusPriority[statusA] ?? 99;
+    const prioB = statusPriority[statusB] ?? 99;
+    if (prioA !== prioB) return prioA - prioB;
+
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+
+    if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+      return timeB - timeA;
+    }
+    const numIdA = typeof a.id === "number" ? a.id : parseInt(String(a.id || "0").replace(/\D/g, "") || "0", 10);
+    const numIdB = typeof b.id === "number" ? b.id : parseInt(String(b.id || "0").replace(/\D/g, "") || "0", 10);
+    return numIdB - numIdA;
+  });
 }
 
 export async function createMedicineRequestApi(payload: {

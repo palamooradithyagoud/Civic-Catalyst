@@ -23,7 +23,7 @@ export function EmptyState({
       <p className="empty-state-desc">{description}</p>
       {comingSoon && (
         <span className="mt-3 inline-flex items-center text-xs font-semibold px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-          Coming in Phase 2
+          Coming Soon
         </span>
       )}
     </div>

@@ -249,11 +249,13 @@ def request_mandal_requisition(item_id: int, quantity: int, reason: str = "") ->
 def distribute_item(
     item_id: int,
     quantity: int,
-    beneficiary: str,
-    area_village: str,
+    beneficiary_ref: str = "",
+    area_village: str = "",
     purpose: str = "",
     notes: str = "",
+    beneficiary: str = "",
 ) -> Dict[str, Any]:
+    beneficiary = beneficiary_ref or beneficiary
     now_str = datetime.now().isoformat()
 
     res = supabase.table("inventory_items").select("*").eq("id", item_id).single().execute()
@@ -342,7 +344,23 @@ def distribute_item(
 
 def get_medicine_requests() -> List[Dict[str, Any]]:
     res = supabase.table("medicine_requests").select("*").order("created_at", desc=True).execute()
-    return res.data or []
+    data = res.data or []
+    status_prio = {"PENDING": 1, "UNDER_REVIEW": 1, "NEW": 1, "REQUESTED": 1, "APPROVED": 2, "PARTIALLY_APPROVED": 2, "DISPATCHED": 3, "RECEIVED": 4, "REJECTED": 5}
+    
+    def get_sort_key(r):
+        st = str(r.get("status", "")).strip().upper()
+        prio = status_prio.get(st, 99)
+        ts = 0
+        cat_str = str(r.get("created_at", "") or "")
+        if cat_str:
+            try:
+                ts = datetime.fromisoformat(cat_str.replace("Z", "+00:00")).timestamp()
+            except Exception:
+                ts = 0
+        req_id_num = int(r.get("id") or 0)
+        return (prio, -ts, -req_id_num)
+
+    return sorted(data, key=get_sort_key)
 
 
 def create_medicine_request(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -483,3 +501,10 @@ def update_medicine_request_status(
         raise ValueError(f"Failed to update medicine request {request_id} in Supabase")
 
     return result.data[0]
+
+
+def seed_data() -> Dict[str, Any]:
+    items_res = supabase.table("inventory_items").select("id").execute()
+    count = len(items_res.data or [])
+    return {"status": "success", "items_count": count}
+

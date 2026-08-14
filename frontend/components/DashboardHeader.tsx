@@ -2,7 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { clearSession } from "@/services/demoSession";
-import { LogOut, Leaf, Shield } from "lucide-react";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { CivicLogo } from "@/components/CivicLogo";
+import { LogOut } from "lucide-react";
 
 interface DashboardHeaderProps {
   title: string;
@@ -26,12 +28,7 @@ export function DashboardHeader({ title, subtitle, role }: DashboardHeaderProps)
         <div className="gov-header-inner">
           {/* Brand */}
           <div className="gov-logo">
-            <div className="gov-logo-icon">
-              {isOfficial
-                ? <Shield className="h-5 w-5 text-white" style={{ position: "relative", zIndex: 1 }} />
-                : <Leaf className="h-5 w-5 text-white" style={{ position: "relative", zIndex: 1 }} />
-              }
-            </div>
+            <CivicLogo size="sm" />
             <div style={{ minWidth: 0 }}>
               <p className="gov-logo-name">{title}</p>
               {subtitle && (
@@ -42,6 +39,9 @@ export function DashboardHeader({ title, subtitle, role }: DashboardHeaderProps)
 
           {/* Right side */}
           <div className="gov-header-right">
+            {/* Language Selector */}
+            <LanguageSelector variant="compact" />
+
             {/* Live role badge */}
             <span className={`role-pill ${isOfficial ? "official" : "citizen"}`} style={{ display: "none" }}>
               <span aria-hidden />

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Noto_Sans, Inter } from "next/font/google";
+import { GoogleTranslateScript } from "@/components/GoogleTranslateScript";
 import "./globals.css";
 
 const notoSans = Noto_Sans({
@@ -34,10 +35,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${notoSans.variable} ${inter.variable} h-full antialiased`}>
+    <html lang="en" data-scroll-behavior="smooth" className={`${notoSans.variable} ${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans">
+        <GoogleTranslateScript />
         {children}
       </body>
     </html>
   );
 }
+

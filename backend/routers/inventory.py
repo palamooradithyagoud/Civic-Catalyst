@@ -149,21 +149,53 @@ def get_analytics():
     items = db_supabase.get_items()
     dists = db_supabase.get_distributions()
 
-    cat_counts: Dict[str, int] = {}
+    cat_map: Dict[str, Dict[str, Any]] = {}
     for item in items:
         cat = item.get("category_name", "General")
-        cat_counts[cat] = cat_counts.get(cat, 0) + item["current_quantity"]
+        if cat not in cat_map:
+            cat_map[cat] = {"category": cat, "item_count": 0, "total_quantity": 0}
+        cat_map[cat]["item_count"] += 1
+        cat_map[cat]["total_quantity"] += item.get("current_quantity", 0)
 
     status_counts: Dict[str, int] = {}
     for item in items:
-        st = item["status"]
+        st = item.get("status", "Healthy")
         status_counts[st] = status_counts.get(st, 0) + 1
 
+    purpose_map: Dict[str, Dict[str, Any]] = {}
+    for d in dists:
+        p = d.get("purpose", "Other")
+        if p not in purpose_map:
+            purpose_map[p] = {"purpose": p, "record_count": 0, "total_quantity": 0}
+        purpose_map[p]["record_count"] += 1
+        purpose_map[p]["total_quantity"] += d.get("quantity", 0)
+
+    item_dist_map: Dict[str, Dict[str, Any]] = {}
+    for d in dists:
+        name = d.get("item_name", "Unknown")
+        if name not in item_dist_map:
+            item_dist_map[name] = {"item_name": name, "unit": d.get("unit", "Units"), "total_distributed": 0}
+        item_dist_map[name]["total_distributed"] += d.get("quantity", 0)
+
+    top_distributed = sorted(list(item_dist_map.values()), key=lambda x: x["total_distributed"], reverse=True)[:5]
+
+    trend_map: Dict[str, Dict[str, Any]] = {}
+    for d in dists:
+        day = str(d.get("created_at") or d.get("date") or "")[:10]
+        if day:
+            if day not in trend_map:
+                trend_map[day] = {"date": day, "total_quantity": 0, "count": 0}
+            trend_map[day]["total_quantity"] += d.get("quantity", 0)
+            trend_map[day]["count"] += 1
+
+    daily_trend = sorted(list(trend_map.values()), key=lambda x: x["date"])[-7:]
+
     return AnalyticsResponse(
-        category_stock=[{"category_name": k, "total_quantity": v} for k, v in cat_counts.items()],
-        status_breakdown=[{"status": k, "count": v} for k, v in status_counts.items()],
-        area_distribution=[{"area_village": "Ward 3", "total_distributed": sum(d["quantity"] for d in dists)}],
-        monthly_consumption=[{"month": datetime.now().strftime("%b %Y"), "total_distributed": sum(d["quantity"] for d in dists)}]
+        category_breakdown=list(cat_map.values()),
+        distribution_by_purpose=list(purpose_map.values()),
+        top_distributed_items=top_distributed,
+        daily_distribution_trend=daily_trend,
+        stock_status_summary=status_counts
     )
 
 

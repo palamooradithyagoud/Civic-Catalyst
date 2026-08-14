@@ -6,8 +6,11 @@ import {
   getSession,
   isVillager,
   clearSession,
+  setVillagerSession,
+  DEMO_VILLAGER,
 } from "@/services/demoSession";
 import type { DemoVillager } from "@/types";
+import { CivicLogo } from "@/components/CivicLogo";
 import IndianNationalEmblem from "@/components/IndianNationalEmblem";
 import {
   LayoutDashboard,
@@ -50,6 +53,7 @@ import {
   CloudRain,
   ShieldCheck,
   Globe,
+  Megaphone,
 } from "lucide-react";
 import {
   analyzeIssueImage,
@@ -60,6 +64,7 @@ import {
 } from "@/services/complaintsApi";
 import { fetchLiveGpsWeather, type WeatherData } from "@/services/weatherApi";
 import { translations, type Language } from "@/lib/translations";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 const NAV_ITEMS = [
   { id: "home", label: "Dashboard", icon: LayoutDashboard, badge: null },
@@ -134,6 +139,54 @@ export default function CitizenDashboard() {
   // Location Auto-detect State
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [locationDetected, setLocationDetected] = useState(false);
+
+  // ASHA Worker Live Announcements & Notifications State
+  const [ashaAnnouncements, setAshaAnnouncements] = useState<any[]>([]);
+  const [activeBannerAnnc, setActiveBannerAnnc] = useState<any | null>(null);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+
+  const loadAshaAnnouncements = () => {
+    try {
+      const stored = localStorage.getItem("civic_asha_announcements");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setAshaAnnouncements(parsed);
+        if (parsed.length > 0) {
+          setActiveBannerAnnc(parsed[0]);
+        }
+      } else {
+        const defaultAnnc = [
+          {
+            id: "ANNC-2026-001",
+            title: "📢 National Pulse Polio Drive Active Today!",
+            category: "Polio Vaccination",
+            location: "Ward 3 PHC Sub-Center & Door-to-Door",
+            message: "Special Pulse Polio booth is active today. All children aged 0-5 years must receive 2 oral polio drops. ASHA workers are visiting homes.",
+            priority: "Urgent",
+            posted_by: "Sunita Devi (ASHA Worker)",
+            created_at: "Today, 08:30 AM",
+            unread: true,
+          }
+        ];
+        localStorage.setItem("civic_asha_announcements", JSON.stringify(defaultAnnc));
+        setAshaAnnouncements(defaultAnnc);
+        setActiveBannerAnnc(defaultAnnc[0]);
+      }
+    } catch (e) {
+      console.warn("Announcements storage error", e);
+    }
+  };
+
+  useEffect(() => {
+    loadAshaAnnouncements();
+    const handleSync = () => loadAshaAnnouncements();
+    window.addEventListener("storage", handleSync);
+    window.addEventListener("asha_announcement_posted", handleSync);
+    return () => {
+      window.removeEventListener("storage", handleSync);
+      window.removeEventListener("asha_announcement_posted", handleSync);
+    };
+  }, []);
 
   // Live GPS Weather State
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
@@ -216,14 +269,10 @@ export default function CitizenDashboard() {
   };
 
   useEffect(() => {
-    const s = getSession();
-    if (!s) {
-      router.replace("/");
-      return;
-    }
-    if (!isVillager(s)) {
-      router.replace("/panchayat/dashboard");
-      return;
+    let s = getSession();
+    if (!s || !isVillager(s)) {
+      setVillagerSession();
+      s = DEMO_VILLAGER;
     }
     setSession(s as DemoVillager);
     setLoading(false);
@@ -386,9 +435,7 @@ export default function CitizenDashboard() {
       <aside className="panchayat-sidebar">
         {/* Logo */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">
-            <Shield style={{ width: 16, height: 16, color: "white" }} />
-          </div>
+          <CivicLogo size="sm" />
           <div>
             <div className="sidebar-logo-name">{t("citizenTitle")}</div>
             <div className="sidebar-logo-version">{t("citizenSub")}</div>
@@ -444,35 +491,83 @@ export default function CitizenDashboard() {
         {/* Top bar */}
         <header className="panchayat-topbar">
           <div className="topbar-right" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            {/* Language Selector Dropdown */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#f8fafc", padding: "0.35rem 0.65rem", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
-              <Globe size={15} style={{ color: "#047857" }} />
-              <select
-                value={lang}
-                onChange={(e) => changeLanguage(e.target.value as Language)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  fontSize: "0.78rem",
-                  fontWeight: 800,
-                  color: "#0f172a",
-                  outline: "none",
-                  cursor: "pointer",
-                }}
-              >
-                <option value="en">🇬🇧 English</option>
-                <option value="hi">🇮🇳 हिंदी (Hindi)</option>
-                <option value="te">🇮🇳 తెలుగు (Telugu)</option>
-              </select>
-            </div>
+            {/* Language Selector Dropdown (Google Translation) */}
+            <LanguageSelector onLanguageChange={(l) => setLang(l as Language)} />
 
             <button className="topbar-icon-btn" title="Messages">
               <MessageSquare style={{ width: 15, height: 15 }} />
             </button>
-            <button className="topbar-icon-btn" title="Notifications">
+            <button
+              className="topbar-icon-btn"
+              title="Notifications & ASHA Alerts"
+              onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+              style={{ position: "relative" }}
+            >
               <Bell style={{ width: 15, height: 15 }} />
-              <span className="topbar-notif-dot">2</span>
+              {ashaAnnouncements.length > 0 && (
+                <span className="topbar-notif-dot">{ashaAnnouncements.length}</span>
+              )}
             </button>
+
+            {/* Notifications Bell Dropdown Popup */}
+            {showNotifDropdown && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "55px",
+                  right: "120px",
+                  width: "340px",
+                  background: "#ffffff",
+                  borderRadius: "14px",
+                  border: "1px solid #cbd5e1",
+                  boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+                  zIndex: 1000,
+                  padding: "1rem",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", borderBottom: "1px solid #f1f5f9", paddingBottom: "0.5rem" }}>
+                  <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    <Bell size={16} style={{ color: "#0d9488" }} />
+                    Live ASHA Health Broadcasts
+                  </div>
+                  <button onClick={() => setShowNotifDropdown(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}>
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", maxHeight: "280px", overflowY: "auto" }}>
+                  {ashaAnnouncements.length === 0 ? (
+                    <div style={{ fontSize: "0.78rem", color: "#64748b", textAlign: "center", padding: "1rem" }}>No active health notifications</div>
+                  ) : (
+                    ashaAnnouncements.map((annc) => (
+                      <div
+                        key={annc.id}
+                        onClick={() => {
+                          setActiveBannerAnnc(annc);
+                          setShowNotifDropdown(false);
+                        }}
+                        style={{
+                          padding: "0.65rem 0.75rem",
+                          borderRadius: "10px",
+                          background: annc.priority === "Urgent" ? "#f0fdfa" : "#f8fafc",
+                          border: annc.priority === "Urgent" ? "1px solid #99f6e4" : "1px solid #e2e8f0",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "0.65rem", fontWeight: 800, color: "#0d9488" }}>{annc.category}</span>
+                          <span style={{ fontSize: "0.65rem", color: "#94a3b8" }}>{annc.created_at}</span>
+                        </div>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#0f172a", marginTop: "0.15rem" }}>{annc.title}</div>
+                        <div style={{ fontSize: "0.72rem", color: "#475569", marginTop: "0.2rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {annc.message}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="topbar-profile">
               <div className="topbar-avatar">{getInitials(displayName)}</div>
@@ -508,6 +603,57 @@ export default function CitizenDashboard() {
                   {t("welcomeSub")}
                 </p>
               </div>
+
+              {/* ── LIVE ASHA HEALTH ANNOUNCEMENT & ALERT BANNER ── */}
+              {activeBannerAnnc && (
+                <div
+                  style={{
+                    background: activeBannerAnnc.priority === "Urgent"
+                      ? "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)"
+                      : "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+                    color: "white",
+                    borderRadius: "16px",
+                    padding: "1.1rem 1.25rem",
+                    marginBottom: "1rem",
+                    boxShadow: "0 8px 24px rgba(13, 148, 136, 0.25)",
+                    position: "relative",
+                    border: "1px solid rgba(255,255,255,0.25)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem", flexWrap: "wrap" }}>
+                        <span style={{ background: "#fef08a", color: "#854d0e", padding: "0.15rem 0.65rem", borderRadius: "999px", fontSize: "0.68rem", fontWeight: 900 }}>
+                          📢 LIVE ASHA HEALTH ANNOUNCEMENT
+                        </span>
+                        <span style={{ background: "rgba(255,255,255,0.2)", padding: "0.15rem 0.55rem", borderRadius: "999px", fontSize: "0.68rem", fontWeight: 800 }}>
+                          📍 {activeBannerAnnc.location}
+                        </span>
+                        <span style={{ fontSize: "0.68rem", opacity: 0.85 }}>
+                          {activeBannerAnnc.created_at}
+                        </span>
+                      </div>
+
+                      <h3 style={{ fontSize: "1.15rem", fontWeight: 900, margin: "0 0 0.35rem 0" }}>
+                        {activeBannerAnnc.title}
+                      </h3>
+                      <p style={{ fontSize: "0.83rem", margin: 0, opacity: 0.95, lineHeight: 1.45 }}>
+                        {activeBannerAnnc.message}
+                      </p>
+                      <div style={{ fontSize: "0.72rem", opacity: 0.8, marginTop: "0.4rem", fontWeight: 700 }}>
+                        Posted by: {activeBannerAnnc.posted_by}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setActiveBannerAnnc(null)}
+                      style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", borderRadius: "8px", padding: "0.3rem 0.6rem", cursor: "pointer", fontSize: "0.72rem", fontWeight: 800 }}
+                    >
+                      Dismiss ✕
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Live GPS Weather Widget */}
               <div
