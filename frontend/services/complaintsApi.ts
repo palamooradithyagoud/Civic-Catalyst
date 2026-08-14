@@ -1,8 +1,13 @@
 import { supabase } from "@/lib/supabaseClient";
 
-const AI_BASE_URL = process.env.NEXT_PUBLIC_API_URL
-  ? process.env.NEXT_PUBLIC_API_URL.replace(/\/inventory$/, "/complaints")
-  : "http://127.0.0.1:8000/api/complaints";
+const RAW_API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const AI_BASE_URL = RAW_API_URL.includes("/api/complaints")
+  ? RAW_API_URL
+  : RAW_API_URL.includes("/api/inventory")
+  ? RAW_API_URL.replace(/\/inventory$/, "/complaints")
+  : RAW_API_URL.includes("/api")
+  ? `${RAW_API_URL}/complaints`
+  : `${RAW_API_URL}/api/complaints`;
 
 export interface PriorityFactors {
   visual_severity_score: number;

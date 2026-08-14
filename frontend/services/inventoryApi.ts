@@ -1,7 +1,13 @@
 import { supabase } from "@/lib/supabaseClient";
 
-// Backend URL only used for complex multi-step operations where server-side logic is needed
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/inventory";
+const RAW_URL = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API_BASE_URL = RAW_URL.includes("/api/inventory")
+  ? RAW_URL
+  : RAW_URL.includes("/api/complaints")
+  ? RAW_URL.replace(/\/complaints$/, "/inventory")
+  : RAW_URL.includes("/api")
+  ? `${RAW_URL}/inventory`
+  : `${RAW_URL}/api/inventory`;
 
 export interface Category {
   id: number;
