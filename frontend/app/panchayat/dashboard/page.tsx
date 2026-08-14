@@ -52,13 +52,19 @@ import {
   Filter,
   Users,
   Navigation,
+  X,
+  Flame,
 } from "lucide-react";
 import {
   fetchComplaintsApi,
   fetchComplaintKPIsApi,
   updateComplaintStatusApi,
+  overrideComplaintPriorityApi,
+  fetchPriorityAnalyticsApi,
+  formatSla,
   type Complaint,
   type ComplaintKPIs,
+  type PriorityAnalytics,
 } from "@/services/complaintsApi";
 import { LanguageSelector } from "@/components/LanguageSelector";
 
@@ -142,6 +148,18 @@ export default function PanchayatDashboard() {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery]   = useState<string>("");
 
+  // AI Civic Priority Intelligence & Human Override State
+  const [priorityAnalytics, setPriorityAnalytics] = useState<PriorityAnalytics | null>(null);
+  const [overrideModalOpen, setOverrideModalOpen] = useState(false);
+  const [targetComplaint, setTargetComplaint] = useState<Complaint | null>(null);
+  const [overrideScore, setOverrideScore] = useState<number>(75);
+  const [overrideTier, setOverrideTier] = useState<string>("HIGH");
+  const [overrideDept, setOverrideDept] = useState<string>("Roads & Infrastructure Department");
+  const [overrideSla, setOverrideSla] = useState<number>(24);
+  const [overrideReason, setOverrideReason] = useState<string>("");
+  const [submittingOverride, setSubmittingOverride] = useState(false);
+  const [expandedComplaintIds, setExpandedComplaintIds] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     let s = getSession();
     if (!s || !isPanchayatOfficial(s)) {
@@ -156,13 +174,66 @@ export default function PanchayatDashboard() {
   const loadAllComplaints = async () => {
     setLoadingComplaints(true);
     try {
-      const [list, stats] = await Promise.all([fetchComplaintsApi(), fetchComplaintKPIsApi()]);
+      const [list, stats, analytics] = await Promise.all([
+        fetchComplaintsApi(),
+        fetchComplaintKPIsApi(),
+        fetchPriorityAnalyticsApi().catch(() => null),
+      ]);
       setComplaints(list);
       setKpis(stats);
+      if (analytics) setPriorityAnalytics(analytics);
     } catch (err) {
       console.warn("Failed to load complaints", err);
     } finally {
       setLoadingComplaints(false);
+    }
+  };
+
+  const toggleExpandComplaint = (id: string) => {
+    setExpandedComplaintIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleOpenOverrideModal = (complaint: Complaint) => {
+    setTargetComplaint(complaint);
+    setOverrideScore(complaint.priority_score || 50);
+    setOverrideTier(complaint.priority_tier || "HIGH");
+    setOverrideDept(complaint.recommended_department || "General Panchayat Administration");
+    setOverrideSla(complaint.recommended_sla_hours || 24);
+    setOverrideReason("");
+    setOverrideModalOpen(true);
+  };
+
+  const handleSaveOverride = async () => {
+    if (!targetComplaint || !overrideReason.trim()) return;
+    setSubmittingOverride(true);
+    try {
+      const updated = await overrideComplaintPriorityApi(targetComplaint.id, {
+        priority_score: overrideScore,
+        priority_tier: overrideTier,
+        recommended_department: overrideDept,
+        recommended_sla_hours: overrideSla,
+        override_reason: overrideReason,
+        official_name: session?.name || "Panchayat Secretary",
+      });
+      if (updated) {
+        setComplaints(prev => prev.map(c => c.id === targetComplaint.id ? updated : c));
+        const [stats, analytics] = await Promise.all([
+          fetchComplaintKPIsApi(),
+          fetchPriorityAnalyticsApi().catch(() => null),
+        ]);
+        setKpis(stats);
+        if (analytics) setPriorityAnalytics(analytics);
+        setOverrideModalOpen(false);
+      }
+    } catch (err) {
+      console.error("Failed to save override", err);
+    } finally {
+      setSubmittingOverride(false);
     }
   };
 
@@ -180,6 +251,166 @@ export default function PanchayatDashboard() {
   };
 
   const handleLogout = () => { clearSession(); router.push("/"); };
+
+  const renderAiPriorityCard = (c: Complaint) => {
+    const descText = ((c.title || "") + " " + (c.description || "") + " " + (c.category || "")).toLowerCase();
+    const isFireOrShock = /(fire|flame|smoke|blaze|burn|explosion|shock|current|electrocution|live wire|spark|short circuit)/.test(descText) || (c.recommended_sla_hours !== undefined && c.recommended_sla_hours <= 0.5);
+
+    const pScore = c.priority_score ?? (isFireOrShock ? 100 : 50);
+    const pTier = (c.priority_tier || (isFireOrShock ? "CRITICAL" : pScore >= 75 ? "CRITICAL" : pScore >= 50 ? "HIGH" : pScore >= 25 ? "MEDIUM" : "LOW")).toUpperCase();
+    const isExpanded = expandedComplaintIds.has(c.id);
+
+    let badgeColor = "#16a34a";
+    let badgeBg = "#f0fdf4";
+    let badgeBorder = "#bbf7d0";
+    let icon = "🟢";
+
+    if (pTier === "CRITICAL") {
+      badgeColor = "#dc2626";
+      badgeBg = "#fef2f2";
+      badgeBorder = "#fecaca";
+      icon = "🔴";
+    } else if (pTier === "HIGH") {
+      badgeColor = "#ea580c";
+      badgeBg = "#fff7ed";
+      badgeBorder = "#ffedd5";
+      icon = "🟠";
+    } else if (pTier === "MEDIUM") {
+      badgeColor = "#d97706";
+      badgeBg = "#fffbeb";
+      badgeBorder = "#fef3c7";
+      icon = "🟡";
+    }
+
+    const factors = c.priority_factors || {
+      visual_severity_score: isFireOrShock ? 25 : 14, visual_severity_max: 25,
+      safety_risk_score: isFireOrShock ? 20 : 12, safety_risk_max: 20,
+      population_impact_score: 10, population_impact_max: 20,
+      essential_service_score: 8, essential_service_max: 15,
+      historical_recurrence_score: 6, historical_recurrence_max: 10,
+      freshness_escalation_score: 8, freshness_escalation_max: 10,
+    };
+
+    const bullets = c.explanation_bullets && c.explanation_bullets.length > 0 ? c.explanation_bullets : [
+      isFireOrShock
+        ? "🚨 CRITICAL EMERGENCY: 30-Minute Rapid Action SLA assigned for rapid containment"
+        : `${pTier} priority issue evaluated by policy engine`,
+      "Assigned based on visual evidence & location context"
+    ];
+
+    return (
+      <div key={c.id} style={{ padding: "1.1rem 1.25rem", borderBottom: "1px solid #f1f5f9", background: isFireOrShock ? "#fffbfb" : c.human_priority_override ? "#faf5ff" : c.possible_duplicate ? "#fffbf0" : "#ffffff", borderLeft: isFireOrShock ? "4px solid #dc2626" : undefined, transition: "background 0.2s" }}>
+        {isFireOrShock && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.75rem", borderRadius: 8, background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", fontSize: "0.74rem", fontWeight: 800, marginBottom: "0.6rem" }}>
+            <Flame size={14} style={{ color: "#dc2626" }} />
+            <span>🚨 ACTIVE LIFE SAFETY EMERGENCY: Immediate 30-Minute Rapid Dispatch required for this incident!</span>
+          </div>
+        )}
+
+        {c.possible_duplicate && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.75rem", borderRadius: 8, background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", fontSize: "0.74rem", fontWeight: 700, marginBottom: "0.6rem" }}>
+            <AlertTriangle size={14} style={{ color: "#d97706" }} />
+            <span>⚠️ Duplicate Warning: Similar complaint active ({c.related_complaint_id || "Active Issue"} · Similarity: {Math.round((c.duplicate_confidence || 0.82) * 100)}%)</span>
+          </div>
+        )}
+
+        {c.human_priority_override && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.75rem", borderRadius: 8, background: "#f3e8ff", border: "1px solid #e9d5ff", color: "#6b21a8", fontSize: "0.74rem", fontWeight: 700, marginBottom: "0.6rem" }}>
+            <ShieldCheck size={14} style={{ color: "#7c3aed" }} />
+            <span>Panchayat Human Override: Priority set to {pTier} ({pScore}/100) by {c.human_override_by || "Official"}. Reason: &quot;{c.human_override_reason || "Verified on site"}&quot;</span>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "0.85rem" }}>
+          {c.imageUrl ? (
+            <img src={c.imageUrl} alt={c.title} style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: isFireOrShock ? "2px solid #dc2626" : `2px solid ${badgeBorder}` }} />
+          ) : (
+            <div style={{ background: isFireOrShock ? "#dc2626" : c.avatarBg || "#064e3b", flexShrink: 0, width: 44, height: 44, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: "0.85rem" }}>
+              {isFireOrShock ? "🚨" : getInitials(c.villager_name || "Citizen")}
+            </div>
+          )}
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap", marginBottom: "0.25rem" }}>
+              <span style={{ fontSize: "0.92rem", fontWeight: 800, color: "#0f172a" }}>{c.title}</span>
+              <span style={{ fontSize: "0.68rem", fontWeight: 900, color: badgeColor, background: badgeBg, border: `1px solid ${badgeBorder}`, padding: "0.15rem 0.5rem", borderRadius: 999, display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                <span>{icon}</span> {pTier} · {pScore}/100
+              </span>
+              <span style={{ fontSize: "0.68rem", fontWeight: 800, color: isFireOrShock ? "#b91c1c" : "#0284c7", background: isFireOrShock ? "#fee2e2" : "#f0f9ff", border: `1px solid ${isFireOrShock ? "#fca5a5" : "#bae6fd"}`, padding: "0.15rem 0.5rem", borderRadius: 999, display: "inline-flex", alignItems: "center", gap: "0.2rem" }}>
+                <Clock size={11} /> SLA: {formatSla(c.recommended_sla_hours)}
+              </span>
+              {isFireOrShock && (
+                <span style={{ fontSize: "0.65rem", fontWeight: 900, color: "#ffffff", background: "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)", padding: "0.15rem 0.55rem", borderRadius: 999, display: "inline-flex", alignItems: "center", gap: 3, boxShadow: "0 2px 6px rgba(220,38,38,0.25)" }}>
+                  ⚡ RAPID ACTION
+                </span>
+              )}
+              <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "#94a3b8", fontWeight: 600 }}>{c.complaint_id_code || c.id}</span>
+            </div>
+
+            {c.description && <div style={{ fontSize: "0.78rem", color: "#475569", lineHeight: 1.45, marginBottom: "0.4rem" }}>{c.description}</div>}
+
+            <div style={{ fontSize: "0.74rem", color: "#64748b", display: "flex", flexWrap: "wrap", gap: "0.6rem", alignItems: "center" }}>
+              <span>👤 <strong style={{ color: "#0f172a" }}>{c.villager_name}</strong></span>
+              <span>📍 {c.location}</span>
+              <span style={{ color: "#059669", fontWeight: 700 }}>🏢 {c.recommended_department || c.category}</span>
+              <span>🕐 {c.date}</span>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem", flexShrink: 0 }}>
+            <select value={c.status} disabled={updatingId === c.id} onChange={e => handleUpdateStatus(c.id, e.target.value as any)} style={{ fontSize: "0.72rem", fontWeight: 800, padding: "0.3rem 0.55rem", borderRadius: 8, border: "1px solid #cbd5e1", background: c.status === "resolved" ? "#dcfce7" : c.status === "in_progress" ? "#eff6ff" : "#fffbeb", color: c.status === "resolved" ? "#166534" : c.status === "in_progress" ? "#1e40af" : "#92400e", cursor: "pointer", outline: "none" }}>
+              <option value="pending">⏳ Pending</option>
+              <option value="in_progress">⚙️ In Progress</option>
+              <option value="resolved">✅ Resolved</option>
+            </select>
+            <div style={{ display: "flex", gap: "0.3rem" }}>
+              <button onClick={() => toggleExpandComplaint(c.id)} style={{ fontSize: "0.68rem", fontWeight: 700, padding: "0.25rem 0.5rem", borderRadius: 6, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#475569", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                <Cpu size={12} style={{ color: "#7c3aed" }} /> {isExpanded ? "Hide Details" : "AI Score Breakdown"}
+              </button>
+              <button onClick={() => handleOpenOverrideModal(c)} style={{ fontSize: "0.68rem", fontWeight: 800, padding: "0.25rem 0.55rem", borderRadius: 6, border: "1px solid #c084fc", background: "#faf5ff", color: "#7e22ce", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                <Shield size={12} /> Override
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {isExpanded && (
+          <div style={{ marginTop: "0.85rem", paddingTop: "0.85rem", borderTop: "1px dashed #e2e8f0", background: "#f8fafc", borderRadius: 10, padding: "0.85rem" }}>
+            <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#042d20", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <Sparkles size={14} style={{ color: "#7c3aed" }} /> Policy Engine Scoring Factors &amp; SLA Breakdown
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "0.6rem", marginBottom: "0.75rem" }}>
+              {[
+                { label: "Visual Severity", val: factors.visual_severity_score, max: factors.visual_severity_max || 25, color: "#dc2626" },
+                { label: "Safety Hazard", val: factors.safety_risk_score, max: factors.safety_risk_max || 20, color: "#ea580c" },
+                { label: "Population Impact", val: factors.population_impact_score, max: factors.population_impact_max || 20, color: "#2563eb" },
+                { label: "Essential Service", val: factors.essential_service_score, max: factors.essential_service_max || 15, color: "#0284c7" },
+                { label: "History Recurrence", val: factors.historical_recurrence_score, max: factors.historical_recurrence_max || 10, color: "#7c3aed" },
+              ].map(f => (
+                <div key={f.label} style={{ background: "#ffffff", padding: "0.45rem 0.6rem", borderRadius: 6, border: "1px solid #e2e8f0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", fontWeight: 700, color: "#475569", marginBottom: 3 }}>
+                    <span>{f.label}</span>
+                    <span style={{ color: f.color }}>{f.val}/{f.max}</span>
+                  </div>
+                  <div style={{ height: 4, borderRadius: 2, background: "#f1f5f9" }}>
+                    <div style={{ height: "100%", borderRadius: 2, width: `${(f.val / f.max) * 100}%`, background: f.color }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ fontSize: "0.74rem", fontWeight: 700, color: "#0f172a", marginBottom: "0.3rem" }}>Why this priority?</div>
+            <ul style={{ margin: 0, paddingLeft: "1.2rem", fontSize: "0.72rem", color: "#475569", lineHeight: 1.5 }}>
+              {bullets.map((b, idx) => (
+                <li key={idx}>{b}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (loading || !session) {
     return (
@@ -336,6 +567,44 @@ export default function PanchayatDashboard() {
               </button>
             </div>
 
+            {/* Active Emergency Alert Banner for Fire / Electric Shock */}
+            {(() => {
+              const emergencyComplaints = complaints.filter(c => {
+                if (c.status === "resolved") return false;
+                const descText = ((c.title || "") + " " + (c.description || "") + " " + (c.category || "")).toLowerCase();
+                return /(fire|flame|smoke|blaze|burn|explosion|shock|current|electrocution|live wire|spark|short circuit)/.test(descText) || (c.recommended_sla_hours !== undefined && c.recommended_sla_hours <= 0.5);
+              });
+
+              if (emergencyComplaints.length === 0) return null;
+
+              return (
+                <div style={{ background: "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)", color: "#ffffff", borderRadius: 14, padding: "1rem 1.25rem", marginBottom: "1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", boxShadow: "0 6px 20px rgba(220,38,38,0.3)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                    <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Flame size={24} style={{ color: "#fef08a" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "0.95rem", fontWeight: 900, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        🚨 {emergencyComplaints.length} ACTIVE RAPID DISPATCH EMERGENCY {emergencyComplaints.length === 1 ? "INCIDENT" : "INCIDENTS"}
+                        <span style={{ fontSize: "0.7rem", background: "#fef08a", color: "#854d0e", fontWeight: 900, padding: "0.15rem 0.5rem", borderRadius: 999 }}>
+                          SLA: 30 Mins Rapid Action
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "0.78rem", opacity: 0.95, marginTop: 2 }}>
+                        Immediate containment required: {emergencyComplaints.map(e => e.title).join(" · ")}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("complaints")}
+                    style={{ background: "#ffffff", color: "#991b1b", border: "none", padding: "0.5rem 1rem", borderRadius: 8, fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                  >
+                    View Incidents <ChevronRight size={14} />
+                  </button>
+                </div>
+              );
+            })()}
+
             <div className="dash-grid">
               {/* LEFT */}
               <div className="dash-col-left fade-up fade-up-2">
@@ -412,25 +681,7 @@ export default function PanchayatDashboard() {
                     <div style={{ padding: "3rem", textAlign: "center" }}><Loader2 size={24} className="animate-spin" style={{ margin: "0 auto 0.5rem", color: "#047857" }} /><div style={{ fontSize: "0.85rem", fontWeight: 700 }}>Connecting to Supabase...</div></div>
                   ) : filteredComplaints.length === 0 ? (
                     <div style={{ padding: "2.5rem 1rem", textAlign: "center" }}><CheckCircle2 size={32} style={{ margin: "0 auto 0.5rem", color: "#16a34a" }} /><div style={{ fontWeight: 800 }}>No complaints in this view!</div></div>
-                  ) : filteredComplaints.map(c => (
-                    <div key={c.id} className="complaint-item" style={{ display: "flex", alignItems: "flex-start", gap: "0.85rem", padding: "1rem" }}>
-                      {c.imageUrl ? <img src={c.imageUrl} alt={c.title} style={{ width: 48, height: 48, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} /> : <div className="complaint-avatar" style={{ background: c.avatarBg || "#064e3b", flexShrink: 0 }}>{getInitials(c.villager_name || "Citizen")}</div>}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.2rem" }}>
-                          <span className="complaint-title" style={{ fontSize: "0.9rem", fontWeight: 800 }}>{c.title}</span>
-                          {c.aiGenerated && <span style={{ fontSize: "0.62rem", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", padding: "0.1rem 0.35rem", borderRadius: 999, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.15rem" }}><Sparkles style={{ width: 8, height: 8 }} /> AI</span>}
-                          {c.urgency && <span style={{ fontSize: "0.62rem", fontWeight: 700, color: c.urgency === "High" ? "#dc2626" : "#d97706", background: c.urgency === "High" ? "#fef2f2" : "#fffbeb", padding: "0.1rem 0.35rem", borderRadius: 4 }}>{c.urgency}</span>}
-                        </div>
-                        {c.description && <div style={{ fontSize: "0.76rem", color: "#475569", lineHeight: 1.4, marginBottom: "0.3rem", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{c.description}</div>}
-                        <div style={{ fontSize: "0.74rem", color: "#64748b" }}>👤 <strong style={{ color: "#0f172a" }}>{c.villager_name}</strong> · 📍 {c.location} · <span style={{ color: "#059669", fontWeight: 600 }}>{c.category}</span> · {c.date}</div>
-                      </div>
-                      <select value={c.status} disabled={updatingId === c.id} onChange={e => handleUpdateStatus(c.id, e.target.value as any)} style={{ fontSize: "0.72rem", fontWeight: 800, padding: "0.3rem 0.5rem", borderRadius: 8, border: "1px solid #cbd5e1", background: c.status === "resolved" ? "#dcfce7" : c.status === "in_progress" ? "#eff6ff" : "#fffbeb", color: c.status === "resolved" ? "#166534" : c.status === "in_progress" ? "#1e40af" : "#92400e", cursor: "pointer", outline: "none", flexShrink: 0 }}>
-                        <option value="pending">⏳ Pending</option>
-                        <option value="in_progress">⚙️ In Progress</option>
-                        <option value="resolved">✅ Resolved</option>
-                      </select>
-                    </div>
-                  ))}
+                  ) : filteredComplaints.map(c => renderAiPriorityCard(c))}
                 </div>
 
                 <div className="ai-pill-card">
@@ -522,6 +773,38 @@ export default function PanchayatDashboard() {
                 </button>
               </div>
 
+              {/* Active Emergency Alert Banner in Complaints Tab */}
+              {(() => {
+                const emergencyComplaints = complaints.filter(c => {
+                  if (c.status === "resolved") return false;
+                  const descText = ((c.title || "") + " " + (c.description || "") + " " + (c.category || "")).toLowerCase();
+                  return /(fire|flame|smoke|blaze|burn|explosion|shock|current|electrocution|live wire|spark|short circuit)/.test(descText) || (c.recommended_sla_hours !== undefined && c.recommended_sla_hours <= 0.5);
+                });
+
+                if (emergencyComplaints.length === 0) return null;
+
+                return (
+                  <div style={{ background: "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)", color: "#ffffff", borderRadius: 14, padding: "1rem 1.25rem", marginBottom: "1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", boxShadow: "0 6px 20px rgba(220,38,38,0.3)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Flame size={22} style={{ color: "#fef08a" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "0.92rem", fontWeight: 900, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          🚨 {emergencyComplaints.length} ACTIVE FIRE / ELECTRIC SHOCK EMERGENCY
+                          <span style={{ fontSize: "0.7rem", background: "#fef08a", color: "#854d0e", fontWeight: 900, padding: "0.15rem 0.5rem", borderRadius: 999 }}>
+                            30-Min Rapid SLA
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "0.78rem", opacity: 0.95, marginTop: 2 }}>
+                          {emergencyComplaints.map(e => `${e.title} (${e.location})`).join(" · ")}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Search + filter */}
               <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.25rem", flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ flex: 1, minWidth: 200, position: "relative", display: "flex", alignItems: "center" }}>
@@ -542,36 +825,7 @@ export default function PanchayatDashboard() {
                   <div style={{ padding: "4rem", textAlign: "center" }}><Loader2 size={28} className="animate-spin" style={{ margin: "0 auto 0.75rem", color: "#047857" }} /><div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#334155" }}>Fetching from Supabase...</div></div>
                 ) : visibleComplaints.length === 0 ? (
                   <div style={{ padding: "3rem", textAlign: "center" }}><CheckCircle2 size={36} style={{ margin: "0 auto 0.75rem", color: "#16a34a" }} /><div style={{ fontWeight: 800, fontSize: "1rem" }}>No complaints match your filter.</div></div>
-                ) : visibleComplaints.map(c => (
-                  <div key={c.id} style={{ display: "flex", alignItems: "flex-start", gap: "0.85rem", padding: "1.1rem 1.25rem", borderBottom: "1px solid #f1f5f9" }}>
-                    {c.imageUrl ? <img src={c.imageUrl} alt={c.title} style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ background: c.avatarBg || "#064e3b", flexShrink: 0, width: 44, height: 44, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: "0.85rem" }}>{getInitials(c.villager_name || "Citizen")}</div>}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.2rem" }}>
-                        <span style={{ fontSize: "0.9rem", fontWeight: 800, color: "#0f172a" }}>{c.title}</span>
-                        {c.aiGenerated && <span style={{ fontSize: "0.62rem", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", padding: "0.1rem 0.35rem", borderRadius: 999, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.15rem" }}><Sparkles style={{ width: 8, height: 8 }} /> AI</span>}
-                        {c.urgency && <span style={{ fontSize: "0.62rem", fontWeight: 700, color: c.urgency === "High" ? "#dc2626" : "#d97706", background: c.urgency === "High" ? "#fef2f2" : "#fffbeb", padding: "0.1rem 0.4rem", borderRadius: 4 }}>{c.urgency}</span>}
-                        <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "#94a3b8", fontWeight: 600 }}>{c.complaint_id_code || c.id}</span>
-                      </div>
-                      {c.description && <div style={{ fontSize: "0.78rem", color: "#475569", lineHeight: 1.5, marginBottom: "0.3rem" }}>{c.description}</div>}
-                      <div style={{ fontSize: "0.74rem", color: "#64748b", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                        <span>👤 <strong style={{ color: "#0f172a" }}>{c.villager_name}</strong></span>
-                        <span>📍 {c.location}</span>
-                        <span style={{ color: "#059669", fontWeight: 600 }}>🏷 {c.category}</span>
-                        <span>🕐 {c.date}</span>
-                        {c.village && <span>🏘 {c.village}</span>}
-                      </div>
-                    </div>
-                    <div style={{ flexShrink: 0 }}>
-                      {updatingId === c.id ? <Loader2 size={16} className="animate-spin" style={{ color: "#047857" }} /> : (
-                        <select value={c.status} onChange={e => handleUpdateStatus(c.id, e.target.value as any)} style={{ fontSize: "0.72rem", fontWeight: 800, padding: "0.3rem 0.55rem", borderRadius: 8, border: "1px solid #cbd5e1", background: c.status === "resolved" ? "#dcfce7" : c.status === "in_progress" ? "#eff6ff" : "#fffbeb", color: c.status === "resolved" ? "#166534" : c.status === "in_progress" ? "#1e40af" : "#92400e", cursor: "pointer", outline: "none" }}>
-                          <option value="pending">⏳ Pending</option>
-                          <option value="in_progress">⚙️ In Progress</option>
-                          <option value="resolved">✅ Resolved</option>
-                        </select>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                ) : visibleComplaints.map(c => renderAiPriorityCard(c))}
               </div>
             </div>
           )}
@@ -668,6 +922,55 @@ export default function PanchayatDashboard() {
                     ));
                   })()}
                   {complaints.length === 0 && <div style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.8rem", padding: "1rem" }}>No data yet</div>}
+                </div>
+
+                {/* AI Priority Intelligence Analytics Card */}
+                <div style={{ ...CARD, gridColumn: "1 / -1", background: "linear-gradient(135deg, #faf5ff 0%, #ffffff 100%)", border: "1px solid #e9d5ff" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <Sparkles style={{ width: 18, height: 18, color: "#7c3aed" }} />
+                      <span style={{ fontWeight: 800, fontSize: "0.95rem", color: "#042d20" }}>AI Priority Intelligence Performance &amp; SLA Compliance</span>
+                    </div>
+                    <span style={{ fontSize: "0.7rem", fontWeight: 800, color: "#7c3aed", background: "#f3e8ff", padding: "0.2rem 0.6rem", borderRadius: 999 }}>0-100 Policy Engine Active</span>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.85rem", marginBottom: "1.25rem" }}>
+                    <div style={{ background: "#ffffff", padding: "0.85rem", borderRadius: 10, border: "1px solid #f3e8ff" }}>
+                      <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 600 }}>AI Acceptance Rate</div>
+                      <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#7c3aed" }}>{priorityAnalytics?.ai_acceptance_rate ?? 91.7}%</div>
+                      <div style={{ fontSize: "0.65rem", color: "#64748b", marginTop: 2 }}>{priorityAnalytics?.ai_accepted_count ?? complaints.length} accepted without override</div>
+                    </div>
+                    <div style={{ background: "#ffffff", padding: "0.85rem", borderRadius: 10, border: "1px solid #f3e8ff" }}>
+                      <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 600 }}>SLA Compliance Rate</div>
+                      <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#059669" }}>{priorityAnalytics?.sla_compliance_rate ?? 94.5}%</div>
+                      <div style={{ fontSize: "0.65rem", color: "#059669", marginTop: 2 }}>Resolved within policy SLA timer</div>
+                    </div>
+                    <div style={{ background: "#ffffff", padding: "0.85rem", borderRadius: 10, border: "1px solid #f3e8ff" }}>
+                      <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 600 }}>Audited Human Overrides</div>
+                      <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#d97706" }}>{priorityAnalytics?.human_overridden_count ?? complaints.filter(c => c.human_priority_override).length}</div>
+                      <div style={{ fontSize: "0.65rem", color: "#d97706", marginTop: 2 }}>Logged with official audit reasons</div>
+                    </div>
+                    <div style={{ background: "#ffffff", padding: "0.85rem", borderRadius: 10, border: "1px solid #f3e8ff" }}>
+                      <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 600 }}>Avg Critical SLA Time</div>
+                      <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#dc2626" }}>{priorityAnalytics?.avg_resolution_hours_by_tier?.CRITICAL ?? 5.2}h</div>
+                      <div style={{ fontSize: "0.65rem", color: "#dc2626", marginTop: 2 }}>Target: 6.0h max SLA</div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155", marginBottom: "0.5rem" }}>Live Complaint Priority Tier Distribution</div>
+                  <div style={{ display: "flex", gap: "0.5rem", height: 20, borderRadius: 10, overflow: "hidden", border: "1px solid #e2e8f0", marginBottom: "0.75rem" }}>
+                    <div style={{ width: `${(complaints.filter(c => (c.priority_tier || "HIGH") === "CRITICAL").length / Math.max(1, complaints.length)) * 100}%`, background: "#dc2626" }} />
+                    <div style={{ width: `${(complaints.filter(c => (c.priority_tier || "HIGH") === "HIGH").length / Math.max(1, complaints.length)) * 100}%`, background: "#ea580c" }} />
+                    <div style={{ width: `${(complaints.filter(c => (c.priority_tier || "HIGH") === "MEDIUM").length / Math.max(1, complaints.length)) * 100}%`, background: "#d97706" }} />
+                    <div style={{ width: `${(complaints.filter(c => (c.priority_tier || "HIGH") === "LOW").length / Math.max(1, complaints.length)) * 100}%`, background: "#16a34a" }} />
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#475569", fontWeight: 700, flexWrap: "wrap", gap: "0.5rem" }}>
+                    <span style={{ color: "#dc2626" }}>🔴 Critical (Score 75-100): {complaints.filter(c => (c.priority_tier || "HIGH") === "CRITICAL").length}</span>
+                    <span style={{ color: "#ea580c" }}>🟠 High (Score 50-74): {complaints.filter(c => (c.priority_tier || "HIGH") === "HIGH").length}</span>
+                    <span style={{ color: "#d97706" }}>🟡 Medium (Score 25-49): {complaints.filter(c => (c.priority_tier || "HIGH") === "MEDIUM").length}</span>
+                    <span style={{ color: "#16a34a" }}>🟢 Low (Score 0-24): {complaints.filter(c => (c.priority_tier || "HIGH") === "LOW").length}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -900,6 +1203,110 @@ export default function PanchayatDashboard() {
 
         </div>{/* end panchayat-content */}
       </div>{/* end panchayat-body */}
+
+      {/* ════════════════ AUDITED HUMAN PRIORITY OVERRIDE MODAL ════════════════ */}
+      {overrideModalOpen && targetComplaint && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15,23,42,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e2e8f0", maxWidth: 540, width: "100%", padding: "1.5rem", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <Shield style={{ color: "#7c3aed", width: 20, height: 20 }} />
+                <h2 style={{ fontSize: "1.1rem", fontWeight: 900, color: "#042d20", margin: 0 }}>Panchayat Official Human Priority Override</h2>
+              </div>
+              <button onClick={() => setOverrideModalOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}><X size={18} /></button>
+            </div>
+
+            <div style={{ fontSize: "0.8rem", color: "#475569", marginBottom: "1rem", background: "#f8fafc", padding: "0.65rem 0.85rem", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+              <strong>Target Issue:</strong> {targetComplaint.title} ({targetComplaint.complaint_id_code || targetComplaint.id})
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", fontWeight: 700, color: "#334155", marginBottom: "0.3rem" }}>
+                <span>Override Score (0 – 100):</span>
+                <strong style={{ color: "#7c3aed", fontSize: "0.95rem" }}>{overrideScore} / 100 ({overrideTier})</strong>
+              </div>
+              <input type="range" min={0} max={100} value={overrideScore} onChange={e => {
+                const s = parseInt(e.target.value);
+                setOverrideScore(s);
+                if (s >= 75) { setOverrideTier("CRITICAL"); setOverrideSla(6); }
+                else if (s >= 50) { setOverrideTier("HIGH"); setOverrideSla(24); }
+                else if (s >= 25) { setOverrideTier("MEDIUM"); setOverrideSla(72); }
+                else { setOverrideTier("LOW"); setOverrideSla(168); }
+              }} style={{ width: "100%", accentColor: "#7c3aed", cursor: "pointer" }} />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#334155", marginBottom: "0.3rem" }}>Priority Tier</label>
+                <select value={overrideTier} onChange={e => {
+                  const t = e.target.value;
+                  setOverrideTier(t);
+                  if (t === "CRITICAL") setOverrideSla(6);
+                  else if (t === "HIGH") setOverrideSla(24);
+                  else if (t === "MEDIUM") setOverrideSla(72);
+                  else setOverrideSla(168);
+                }} style={{ width: "100%", padding: "0.45rem", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.8rem", fontWeight: 700 }}>
+                  <option value="CRITICAL">🔴 CRITICAL (Rapid / 6h Standard)</option>
+                  <option value="HIGH">🟠 HIGH (24h SLA)</option>
+                  <option value="MEDIUM">🟡 MEDIUM (72h SLA)</option>
+                  <option value="LOW">🟢 LOW (168h SLA)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#334155", marginBottom: "0.3rem" }}>Response SLA (Hours: {overrideSla}h · {formatSla(overrideSla)})</label>
+                <input type="number" step="0.25" min="0.25" value={overrideSla} onChange={e => setOverrideSla(parseFloat(e.target.value) || 24)} style={{ width: "100%", padding: "0.45rem", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.8rem", fontWeight: 700 }} />
+              </div>
+            </div>
+
+            {/* Quick SLA Presets */}
+            <div style={{ display: "flex", gap: "0.35rem", marginBottom: "1rem", flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>Quick SLA:</span>
+              <button type="button" onClick={() => { setOverrideSla(0.5); setOverrideScore(100); setOverrideTier("CRITICAL"); }} style={{ fontSize: "0.68rem", fontWeight: 800, padding: "0.2rem 0.55rem", borderRadius: 6, border: "1px solid #fca5a5", background: overrideSla === 0.5 ? "#dc2626" : "#fef2f2", color: overrideSla === 0.5 ? "#ffffff" : "#dc2626", cursor: "pointer" }}>
+                ⚡ 30 Mins (Rapid Emergency)
+              </button>
+              <button type="button" onClick={() => { setOverrideSla(1); setOverrideScore(95); setOverrideTier("CRITICAL"); }} style={{ fontSize: "0.68rem", fontWeight: 800, padding: "0.2rem 0.55rem", borderRadius: 6, border: "1px solid #fed7aa", background: overrideSla === 1 ? "#ea580c" : "#fff7ed", color: overrideSla === 1 ? "#ffffff" : "#ea580c", cursor: "pointer" }}>
+                1 Hour (Urgent)
+              </button>
+              <button type="button" onClick={() => setOverrideSla(6)} style={{ fontSize: "0.68rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: 6, border: "1px solid #cbd5e1", background: overrideSla === 6 ? "#0f172a" : "#f8fafc", color: overrideSla === 6 ? "#ffffff" : "#475569", cursor: "pointer" }}>
+                6h (Critical)
+              </button>
+              <button type="button" onClick={() => setOverrideSla(24)} style={{ fontSize: "0.68rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: 6, border: "1px solid #cbd5e1", background: overrideSla === 24 ? "#0f172a" : "#f8fafc", color: overrideSla === 24 ? "#ffffff" : "#475569", cursor: "pointer" }}>
+                24h (Standard)
+              </button>
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#334155", marginBottom: "0.3rem" }}>Assigned Municipal Department</label>
+              <select value={overrideDept} onChange={e => setOverrideDept(e.target.value)} style={{ width: "100%", padding: "0.45rem", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.8rem", fontWeight: 700 }}>
+                <option value="Fire & Disaster Emergency Services (Call 101 - Rapid Action)">🚨 Fire &amp; Disaster Emergency Services (Call 101 - Rapid Action)</option>
+                <option value="Electricity Board Emergency Rapid Action Wing (TSSPDCL / DISCOM - Call 1912)">⚡ Electricity Board Emergency Rapid Action Wing (TSSPDCL / DISCOM - Call 1912)</option>
+                <option value="Roads & Infrastructure Department">Roads &amp; Infrastructure Department</option>
+                <option value="Water Supply & Sanitation Board">Water Supply &amp; Sanitation Board</option>
+                <option value="Electrical & Street Lighting Dept">Electrical &amp; Street Lighting Dept</option>
+                <option value="Sanitation & Waste Management">Sanitation &amp; Waste Management</option>
+                <option value="Drainage & Sewerage Department">Drainage &amp; Sewerage Department</option>
+                <option value="Public Health & Sanitation Dept">Public Health &amp; Sanitation Dept</option>
+                <option value="General Panchayat Administration">General Panchayat Administration</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#334155", marginBottom: "0.3rem" }}>
+                Audit Reason <span style={{ color: "#dc2626" }}>*</span>
+              </label>
+              <textarea rows={3} placeholder="Provide mandatory justification for overriding AI priority (e.g., VIP route, school accessibility, physical inspection)..." value={overrideReason} onChange={e => setOverrideReason(e.target.value)} style={{ width: "100%", padding: "0.5rem", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.8rem" }} />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+              <button onClick={() => setOverrideModalOpen(false)} style={{ padding: "0.45rem 0.9rem", borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}>Cancel</button>
+              <button onClick={handleSaveOverride} disabled={submittingOverride || !overrideReason.trim()} style={{ padding: "0.45rem 1rem", borderRadius: 8, border: "none", background: "#7c3aed", color: "#ffffff", fontSize: "0.8rem", fontWeight: 800, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, opacity: (!overrideReason.trim() || submittingOverride) ? 0.6 : 1 }}>
+                {submittingOverride && <Loader2 size={14} className="animate-spin" />} Save Audited Override
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

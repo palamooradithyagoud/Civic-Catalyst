@@ -124,8 +124,57 @@ CREATE TABLE IF NOT EXISTS public.complaints (
     ai_generated BOOLEAN DEFAULT FALSE,
     date_label VARCHAR(100),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- AI Civic Priority Intelligence Engine Columns
+    ai_category VARCHAR(100),
+    ai_severity VARCHAR(50),
+    ai_safety_risk VARCHAR(50),
+    ai_accessibility_impact JSONB,
+    ai_affected_area VARCHAR(50),
+    ai_confidence NUMERIC DEFAULT 0.90,
+    priority_score INTEGER DEFAULT 50,
+    priority_tier VARCHAR(50) DEFAULT 'HIGH',
+    priority_factors JSONB,
+    recommended_department VARCHAR(255) DEFAULT 'Roads & Infrastructure Department',
+    department_confidence NUMERIC DEFAULT 0.90,
+    recommended_sla_hours INTEGER DEFAULT 24,
+    explanation_bullets JSONB,
+    possible_duplicate BOOLEAN DEFAULT FALSE,
+    duplicate_confidence NUMERIC DEFAULT 0.0,
+    related_complaint_id VARCHAR(100),
+    ai_analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    human_priority_override BOOLEAN DEFAULT FALSE,
+    human_override_reason TEXT,
+    human_override_by VARCHAR(255),
+    human_override_at TIMESTAMP WITH TIME ZONE,
+    human_override_department VARCHAR(255),
+    human_override_sla_hours INTEGER
 );
+
+-- ── 8b. Migration Alter Statements (For pre-existing complaints table) ────────
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS ai_category VARCHAR(100);
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS ai_severity VARCHAR(50);
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS ai_safety_risk VARCHAR(50);
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS ai_accessibility_impact JSONB;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS ai_affected_area VARCHAR(50);
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS ai_confidence NUMERIC DEFAULT 0.90;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS priority_score INTEGER DEFAULT 50;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS priority_tier VARCHAR(50) DEFAULT 'HIGH';
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS priority_factors JSONB;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS recommended_department VARCHAR(255) DEFAULT 'Roads & Infrastructure Department';
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS department_confidence NUMERIC DEFAULT 0.90;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS recommended_sla_hours INTEGER DEFAULT 24;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS explanation_bullets JSONB;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS possible_duplicate BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS duplicate_confidence NUMERIC DEFAULT 0.0;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS related_complaint_id VARCHAR(100);
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS ai_analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS human_priority_override BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS human_override_reason TEXT;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS human_override_by VARCHAR(255);
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS human_override_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS human_override_department VARCHAR(255);
+ALTER TABLE public.complaints ADD COLUMN IF NOT EXISTS human_override_sla_hours INTEGER;
 
 -- ── 9. Enable Row Level Security & Public Access Policies ────────────────────
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
@@ -185,13 +234,41 @@ INSERT INTO public.inventory_items
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.complaints
-(complaint_id_code, title, description, category, location, urgency, status, villager_name, villager_id, village, ai_generated, date_label) VALUES
-('C-001', 'Broken road near main market', 'Deep pothole and asphalt damage obstructing traffic near central market entrance.', 'Roads & Infrastructure', 'Market Road, Ward 4', 'High', 'pending', 'Ramesh Kumar', 'vil_001', 'Shyampet', true, 'Today, 9:15 AM'),
-('C-002', 'Water supply disruption in Ward 2', 'Burst main pipeline causing clean water leak and low pressure across residential houses.', 'Water Supply', 'Ward 2 Residential Area', 'High', 'in_progress', 'Suresh Reddy', 'vil_002', 'Shyampet', true, 'Yesterday, 6:00 PM'),
-('C-003', 'Garbage clearance near primary school', 'Unsegregated garbage accumulation creating unhygienic conditions near school entrance.', 'Sanitation', 'Primary School Lane', 'Medium', 'resolved', 'Meena Patel', 'vil_003', 'Shyampet', false, '12 Aug, 2:45 PM')
+(complaint_id_code, title, description, category, location, urgency, status, villager_name, villager_id, village, ai_generated, date_label, priority_score, priority_tier, recommended_department, recommended_sla_hours) VALUES
+('C-001', 'Large pothole blocking ambulance access near school', 'Severe asphalt collapse and deep pothole near primary school entrance. Obstructs ambulance and school vehicle movement.', 'Roads & Infrastructure', 'Market Road, Ward 4', 'High', 'pending', 'Ramesh Kumar', 'vil_001', 'Shyampet', true, 'Today, 9:15 AM', 87, 'CRITICAL', 'Roads & Infrastructure Department', 6),
+('C-002', 'Major drinking water pipeline burst in Ward 2', 'Burst main drinking water pipeline causing clean water flooding and low residential pressure.', 'Water Supply', 'Ward 2 Residential Area', 'High', 'in_progress', 'Suresh Reddy', 'vil_002', 'Shyampet', true, 'Yesterday, 6:00 PM', 68, 'HIGH', 'Water Supply & Sanitation Board', 24),
+('C-003', 'Garbage accumulation near residential lane', 'Unsegregated municipal waste dump creating foul odor and hygiene concerns.', 'Sanitation', 'Primary School Lane', 'Medium', 'resolved', 'Meena Patel', 'vil_003', 'Shyampet', false, '12 Aug, 2:45 PM', 42, 'MEDIUM', 'Sanitation & Waste Management', 72),
+('C-004', 'Single broken streetlight pole', 'Street lamp bulb non-functional near corner alleyway.', 'Street Lighting', 'Ward 1 North Alley', 'Low', 'pending', 'Anil Goud', 'vil_004', 'Shyampet', true, 'Today, 8:00 AM', 18, 'LOW', 'Electrical & Street Lighting Dept', 168)
 ON CONFLICT (complaint_id_code) DO NOTHING;
 
--- ── 11. Schema Migration Patch (run on existing deployments) ─────────────────
--- If distribution_records table already exists without the 'unit' column, add it:
-ALTER TABLE public.distribution_records
-    ADD COLUMN IF NOT EXISTS unit VARCHAR(50) DEFAULT 'Units';
+-- ── 11. Schema Migration Patch (Run in Supabase SQL Editor) ──────────────────
+ALTER TABLE public.distribution_records ADD COLUMN IF NOT EXISTS unit VARCHAR(50) DEFAULT 'Units';
+
+ALTER TABLE public.complaints
+    ADD COLUMN IF NOT EXISTS ai_category VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS ai_severity VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS ai_safety_risk VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS ai_accessibility_impact JSONB,
+    ADD COLUMN IF NOT EXISTS ai_affected_area VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS ai_confidence NUMERIC DEFAULT 0.90,
+    ADD COLUMN IF NOT EXISTS priority_score INTEGER DEFAULT 50,
+    ADD COLUMN IF NOT EXISTS priority_tier VARCHAR(50) DEFAULT 'HIGH',
+    ADD COLUMN IF NOT EXISTS priority_factors JSONB,
+    ADD COLUMN IF NOT EXISTS recommended_department VARCHAR(255) DEFAULT 'Roads & Infrastructure Department',
+    ADD COLUMN IF NOT EXISTS department_confidence NUMERIC DEFAULT 0.90,
+    ADD COLUMN IF NOT EXISTS recommended_sla_hours NUMERIC DEFAULT 24,
+    ADD COLUMN IF NOT EXISTS explanation_bullets JSONB,
+    ADD COLUMN IF NOT EXISTS possible_duplicate BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS duplicate_confidence NUMERIC DEFAULT 0.0,
+    ADD COLUMN IF NOT EXISTS related_complaint_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS ai_analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS human_priority_override BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS human_override_reason TEXT,
+    ADD COLUMN IF NOT EXISTS human_override_by VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS human_override_at TIMESTAMP WITH TIME ZONE,
+    ADD COLUMN IF NOT EXISTS human_override_department VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS human_override_sla_hours NUMERIC;
+
+-- Refresh PostgREST schema cache
+NOTIFY pgrst, 'reload schema';
+

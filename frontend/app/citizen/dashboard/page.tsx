@@ -43,6 +43,7 @@ import {
   Zap,
   Wind,
   Droplets,
+  Clock,
   Sun,
   Compass,
   Navigation,
@@ -54,12 +55,14 @@ import {
   ShieldCheck,
   Globe,
   Megaphone,
+  Flame,
 } from "lucide-react";
 import {
   analyzeIssueImage,
   reverseGeocodeLocation,
   createComplaintApi,
   fetchComplaintsApi,
+  formatSla,
   type Complaint,
 } from "@/services/complaintsApi";
 import { fetchLiveGpsWeather, type WeatherData } from "@/services/weatherApi";
@@ -812,45 +815,62 @@ export default function CitizenDashboard() {
                       </button>
                     </div>
                   ) : (
-                    complaints.map((c) => (
-                      <div key={c.id} className="complaint-item" style={{ padding: "1rem 1.25rem", display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-                        {c.imageUrl ? (
-                          <img src={c.imageUrl} alt={c.title} style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: "1px solid #a7f3d0", flexShrink: 0 }} />
-                        ) : (
-                          <div className="complaint-avatar" style={{ background: c.avatarBg || "#064e3b", width: 48, height: 48, borderRadius: 12, fontSize: "0.85rem", flexShrink: 0 }}>
-                            {c.id}
-                          </div>
-                        )}
-                        <div className="complaint-info" style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.2rem" }}>
-                            <span className="complaint-title" style={{ fontSize: "0.95rem", fontWeight: 800 }}>{c.title}</span>
-                            {c.aiGenerated && (
-                              <span style={{ fontSize: "0.65rem", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", padding: "0.1rem 0.4rem", borderRadius: 999, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.15rem" }}>
-                                <Sparkles style={{ width: 9, height: 9 }} /> AI Auto-Written
-                              </span>
-                            )}
-                          </div>
-                          {c.description && (
-                            <div style={{ fontSize: "0.78rem", color: "#475569", marginBottom: "0.35rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                              {c.description}
+                    complaints.map((c) => {
+                      const descText = ((c.title || "") + " " + (c.description || "") + " " + (c.category || "")).toLowerCase();
+                      const isFireOrShock = /(fire|flame|smoke|blaze|burn|explosion|shock|current|electrocution|live wire|spark|short circuit)/.test(descText) || (c.recommended_sla_hours !== undefined && c.recommended_sla_hours <= 0.5);
+
+                      const pScore = c.priority_score ?? (isFireOrShock ? 100 : 50);
+                      const pTier = (c.priority_tier || (isFireOrShock ? "CRITICAL" : pScore >= 75 ? "CRITICAL" : pScore >= 50 ? "HIGH" : pScore >= 25 ? "MEDIUM" : "LOW")).toUpperCase();
+                      const tierColor = pTier === "CRITICAL" ? "#dc2626" : pTier === "HIGH" ? "#ea580c" : pTier === "MEDIUM" ? "#d97706" : "#16a34a";
+                      const tierBg = pTier === "CRITICAL" ? "#fef2f2" : pTier === "HIGH" ? "#fff7ed" : pTier === "MEDIUM" ? "#fffbeb" : "#f0fdf4";
+                      const tierBorder = pTier === "CRITICAL" ? "#fecaca" : pTier === "HIGH" ? "#ffedd5" : pTier === "MEDIUM" ? "#fef3c7" : "#bbf7d0";
+
+                      return (
+                        <div key={c.id} className="complaint-item" style={{ padding: "1.1rem 1.25rem", display: "flex", alignItems: "flex-start", gap: "1rem", borderBottom: "1px solid #f1f5f9", background: isFireOrShock ? "#fffbfb" : "transparent" }}>
+                          {c.imageUrl ? (
+                            <img src={c.imageUrl} alt={c.title} style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: isFireOrShock ? "2px solid #ef4444" : "1px solid #a7f3d0", flexShrink: 0 }} />
+                          ) : (
+                            <div className="complaint-avatar" style={{ background: isFireOrShock ? "#dc2626" : c.avatarBg || "#064e3b", width: 48, height: 48, borderRadius: 12, fontSize: "0.85rem", flexShrink: 0 }}>
+                              {isFireOrShock ? "🚨" : c.id}
                             </div>
                           )}
-                          <div className="complaint-name" style={{ fontSize: "0.78rem", color: "#64748b" }}>
-                            📍 {c.location} · <span style={{ color: "#059669", fontWeight: 600 }}>{c.category}</span> · {c.date}
+                          <div className="complaint-info" style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.25rem" }}>
+                              <span className="complaint-title" style={{ fontSize: "0.95rem", fontWeight: 800 }}>{c.title}</span>
+                              <span style={{ fontSize: "0.68rem", fontWeight: 900, color: tierColor, background: tierBg, border: `1px solid ${tierBorder}`, padding: "0.15rem 0.5rem", borderRadius: 999 }}>
+                                {pTier} · {pScore}/100 Score
+                              </span>
+                              <span style={{ fontSize: "0.68rem", fontWeight: 800, color: isFireOrShock ? "#b91c1c" : "#0284c7", background: isFireOrShock ? "#fee2e2" : "#f0f9ff", border: `1px solid ${isFireOrShock ? "#fca5a5" : "#bae6fd"}`, padding: "0.15rem 0.5rem", borderRadius: 999, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                <Clock size={11} /> SLA: {formatSla(c.recommended_sla_hours)}
+                              </span>
+                              {isFireOrShock && (
+                                <span style={{ fontSize: "0.65rem", fontWeight: 900, color: "#ffffff", background: "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)", padding: "0.15rem 0.55rem", borderRadius: 999, display: "inline-flex", alignItems: "center", gap: 3, boxShadow: "0 2px 6px rgba(220,38,38,0.25)" }}>
+                                  ⚡ RAPID ACTION
+                                </span>
+                              )}
+                            </div>
+                            {c.description && (
+                              <div style={{ fontSize: "0.78rem", color: "#475569", marginBottom: "0.35rem", lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                                {c.description}
+                              </div>
+                            )}
+                            <div className="complaint-name" style={{ fontSize: "0.74rem", color: "#64748b", display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+                              <span>📍 {c.location}</span>
+                              <span style={{ color: "#059669", fontWeight: 700 }}>🏢 Dept: {c.recommended_department || c.category}</span>
+                              <span>🕐 {c.date}</span>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35rem", flexShrink: 0 }}>
+                            <span className={`complaint-status ${c.status}`} style={{ padding: "0.35rem 0.85rem", fontSize: "0.78rem" }}>
+                              {c.status === "in_progress" ? "In Progress" : c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                            </span>
+                            <span style={{ fontSize: "0.65rem", color: "#64748b", fontWeight: 600 }}>
+                              {c.complaint_id_code || c.id}
+                            </span>
                           </div>
                         </div>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35rem" }}>
-                          <span className={`complaint-status ${c.status}`} style={{ padding: "0.35rem 0.85rem", fontSize: "0.78rem" }}>
-                            {c.status === "in_progress" ? "In Progress" : c.status.charAt(0).toUpperCase() + c.status.slice(1)}
-                          </span>
-                          {c.urgency && (
-                            <span style={{ fontSize: "0.68rem", fontWeight: 700, color: c.urgency === "High" ? "#dc2626" : c.urgency === "Medium" ? "#d97706" : "#16a34a", background: c.urgency === "High" ? "#fef2f2" : c.urgency === "Medium" ? "#fffbeb" : "#f0fdf4", padding: "0.15rem 0.5rem", borderRadius: 6, border: `1px solid ${c.urgency === "High" ? "#fca5a5" : c.urgency === "Medium" ? "#fde68a" : "#86efac"}` }}>
-                              {c.urgency} Urgency
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -1141,8 +1161,8 @@ export default function CitizenDashboard() {
 
       {/* ── NEW COMPLAINT MODAL (AI Vision & Auto GPS Location) ──────── */}
       {modalOpen && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem", overflowY: "auto" }}>
-          <div style={{ background: "#ffffff", borderRadius: 20, padding: "1.75rem", width: "100%", maxWidth: 540, boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(15,23,42,0.65)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem 1rem", overflowY: "auto" }}>
+          <div style={{ background: "#ffffff", borderRadius: 20, padding: "1.75rem", width: "100%", maxWidth: 540, boxShadow: "0 25px 50px -12px rgba(0,0,0,0.3)", position: "relative", maxHeight: "85vh", overflowY: "auto", margin: "auto" }}>
             <button
               onClick={() => { setModalOpen(false); resetFormState(); }}
               style={{ position: "absolute", top: 16, right: 16, border: "none", background: "#f1f5f9", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#64748b" }}
@@ -1256,6 +1276,32 @@ export default function CitizenDashboard() {
                 </div>
               )}
 
+              {/* Real-time Fire & Shock Emergency Alert Banner */}
+              {(() => {
+                const formText = (newTitle + " " + newDescription + " " + newCategory).toLowerCase();
+                const isFormFire = /(fire|flame|smoke|blaze|burn|explosion|gas leak|cylinder)/.test(formText);
+                const isFormShock = /(shock|current|electrocution|live wire|spark|sparking|short circuit|high voltage)/.test(formText);
+                const isFormEmergency = isFormFire || isFormShock || newCategory === "Fire & Disaster Emergency";
+
+                if (!isFormEmergency) return null;
+
+                return (
+                  <div style={{ background: "linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)", border: "2px solid #ef4444", borderRadius: 12, padding: "0.85rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
+                      <Flame size={20} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "0.84rem", fontWeight: 900, color: "#991b1b", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                        🚨 CRITICAL LIFE SAFETY EMERGENCY DETECTED
+                      </div>
+                      <div style={{ fontSize: "0.74rem", color: "#b91c1c", marginTop: 2, lineHeight: 1.4 }}>
+                        Assigned <strong>⚡ 30-Minute Rapid Action SLA</strong> with instant alert dispatch to <strong>{isFormFire ? "Fire Emergency (101)" : "Electricity Emergency Rapid Wing (1912)"}</strong>.
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Title Input */}
               <div>
                 <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155", display: "block", marginBottom: "0.35rem" }}>Issue Title</label>
@@ -1298,6 +1344,8 @@ export default function CitizenDashboard() {
                     <option value="Water Supply">Water Supply</option>
                     <option value="Sanitation">Sanitation &amp; Waste</option>
                     <option value="Electricity">Electricity &amp; Streetlights</option>
+                    <option value="Fire & Disaster Emergency">🔥 Fire &amp; Disaster Emergency (30m Rapid SLA)</option>
+                    <option value="Electricity">⚡ Electric Shock &amp; Live Wire Hazard (30m Rapid SLA)</option>
                     <option value="Health & Other">Health &amp; Other</option>
                   </select>
                 </div>
